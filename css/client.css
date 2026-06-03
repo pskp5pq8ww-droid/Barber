@@ -1,0 +1,175 @@
+/* ===================== Client portal — mobile-first ===================== */
+.app {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 70px 16px 130px;
+  min-height: 100svh;
+}
+@media (min-width: 900px) {
+  .app { max-width: 520px; }
+}
+
+/* Greeting / header card */
+.greeting {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 4px 18px;
+}
+.greeting .avatar {
+  width: 52px; height: 52px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #f6d785 0%, #a07a1f 100%);
+  color: #1a1300;
+  font-family: "Magazine", serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  box-shadow: 0 8px 24px rgba(212,175,55,0.28);
+}
+.greeting .hello { font-size: 0.78rem; color: var(--text-dim); }
+.greeting .name { font-family: "Magazine", serif; font-size: 1.4rem; letter-spacing: 0.04em; }
+.greeting .member { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--gold-1); margin-top: 2px; }
+
+.app-heading {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 24px 4px 12px;
+}
+.app-heading h2 { font-size: 1.15rem; letter-spacing: 0.06em; }
+.app-heading a { font-size: 0.72rem; color: var(--gold-1); letter-spacing: 0.16em; text-transform: uppercase; font-family: "JHC Audemars", serif; }
+
+/* Next appointment hero card */
+.next-card {
+  position: relative;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--line-strong);
+}
+.next-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(212,175,55,0.28), transparent 60%),
+    linear-gradient(180deg, #14110a, #0a0905);
+}
+.next-card .label {
+  font-family: "JHC Audemars", serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+}
+.next-card h3 {
+  margin-top: 8px;
+  font-family: "Magazine", serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.04em;
+}
+.next-card .when {
+  margin-top: 10px;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-family: "JHC Audemars", serif;
+  color: var(--text);
+}
+.next-card .when div { display: flex; flex-direction: column; }
+.next-card .when small { color: var(--text-mute); font-size: 0.65rem; letter-spacing: 0.22em; text-transform: uppercase; }
+.next-card .when b { font-size: 1.1rem; font-weight: 500; letter-spacing: 0.04em; }
+.next-card .place { color: var(--text-dim); font-size: 0.85rem; margin-top: 12px; display:flex; gap:6px; align-items:center; }
+.next-card .actions { display: flex; gap: 10px; margin-top: 18px; }
+
+/* Quick actions */
+.quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 18px 0;
+}
+.quick a {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 6px;
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  text-align: center;
+  font-family: "JHC Audemars", serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: transform .2s, background .2s, color .2s;
+}
+.quick a:hover { transform: translateY(-3px); color: var(--gold-1); background: rgba(212,175,55,0.06); }
+.quick a svg { width: 22px; height: 22px; color: var(--gold-1); }
+
+/* Loyalty stamps */
+.loyalty { padding: 18px; }
+.loyalty h3 { font-size: 1.05rem; letter-spacing: 0.04em; }
+.loyalty .progress-text { color: var(--text-dim); font-size: 0.82rem; margin: 6px 0 12px; }
+.stamps {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+}
+.stamp {
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.12);
+  color: var(--text-mute);
+  font-size: 0.7rem;
+}
+.stamp.is-on {
+  background: linear-gradient(180deg, #f6d785, #a07a1f);
+  border: 1px solid rgba(0,0,0,0.2);
+  color: #1a1300;
+  box-shadow: 0 4px 14px rgba(212,175,55,0.28);
+}
+
+/* History rows */
+.list { display: flex; flex-direction: column; gap: 10px; }
+.row-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.row-item .meta { display: flex; flex-direction: column; min-width: 0; }
+.row-item .meta b { font-size: 0.95rem; font-weight: 500; }
+.row-item .meta small { color: var(--text-mute); font-size: 0.78rem; }
+.row-item .price { font-family: "JHC Audemars", serif; font-weight: 700; color: var(--gold-1); }
+
+/* Notifications */
+.notif {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.notif .ic {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: rgba(212,175,55,0.12);
+  color: var(--gold-1);
+  flex-shrink: 0;
+}
+.notif b { display:block; font-size: 0.92rem; font-weight: 500; margin-bottom: 2px; }
+.notif p { margin: 0; color: var(--text-dim); font-size: 0.82rem; }
+.notif .t { color: var(--text-mute); font-size: 0.72rem; margin-top: 4px; }
+
+/* Profile mini */
+.profile-card { padding: 18px; }
+.profile-card .field { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.profile-card .field:last-child { border-bottom: 0; }
+.profile-card .k { color: var(--text-mute); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; font-family: "JHC Audemars", serif; }
+.profile-card .v { color: var(--text); font-size: 0.95rem; }

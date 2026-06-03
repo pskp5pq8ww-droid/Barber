@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Urban Kings — Premium Barber Experience · Brisbane City</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#050505" />
+  <meta name="description" content="Urban Kings — The Latin Barber Kingdom in Brisbane City. A premium barber experience crafted with precision, style and confidence. Book your fade today." />
+  <meta name="keywords" content="barbershop Brisbane, Latin barber, fade, skin fade, beard trim, Urban Kings, Brisbane City barber" />
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Urban Kings — Premium Barber Experience" />
+  <meta property="og:description" content="Strong like kings, wild as lions. Premium fades & Latin vibes in Brisbane City." />
+  <meta property="og:image" content="assets/urban-kings-logo-clean.png" />
+  <meta property="og:locale" content="en_AU" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Urban Kings — Premium Barber Experience" />
+  <meta name="twitter:description" content="Strong like kings, wild as lions. Premium fades in Brisbane City." />
+  <meta name="twitter:image" content="assets/urban-kings-logo-clean.png" />
+
+  <link rel="icon" type="image/png" href="assets/lion-emblem.png" />
+  <link rel="preload" as="image" href="assets/lion-emblem.png" />
+  <link rel="preload" as="image" href="assets/urban-kings-logo-clean.png" />
+  <link rel="preload" as="image" href="assets/shop-interior.png" />
+
+  <!-- Premium UI font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+  <link rel="stylesheet" href="css/client.css" />
+  <link rel="stylesheet" href="css/admin.css" />
+  <link rel="stylesheet" href="css/auth.css" />
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
+  <!-- SEO: Local business structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HairSalon",
+    "name": "Urban Kings Barbershop",
+    "image": "assets/urban-kings-logo-clean.png",
+    "description": "The Latin Barber Kingdom in Brisbane City. Premium fades, beard trims and grooming.",
+    "address": { "@type": "PostalAddress", "streetAddress": "Level 1 / 123 Charlotte St", "addressLocality": "Brisbane City", "addressRegion": "QLD", "addressCountry": "AU" },
+    "priceRange": "$$",
+    "areaServed": "Brisbane",
+    "slogan": "Strong like kings, wild as lions"
+  }
+  </script>
+</head>
+<body data-view="landing">
+
+  <!-- ========================= PRELOADER (chrome lion) ========================= -->
+  <!-- LOGO INTEGRATION #1: lion emblem (from official transparent logo). Reveal = mask wipe + shimmer (see runPreloader in app.js).
+       Note: the supplied .svg is a raster image, so true vector stroke-draw isn't possible; clip-path mask reveal is used instead. -->
+  <div class="preloader" id="preloader" role="status" aria-label="Loading Urban Kings">
+    <div class="pre-stage">
+      <span class="pre-glow"></span>
+      <img class="pre-lion" src="assets/lion-emblem.png" alt="" aria-hidden="true" />
+      <span class="pre-shimmer"></span>
+      <span class="pre-word">Urban Kings</span>
+      <span class="pre-bar"><i></i></span>
+    </div>
+  </div>
+
+  <!-- ========================= VIEW TRANSITION FLASH ========================= -->
+  <!-- SVG LOGO INTEGRATION POINT #2: lion flash between view changes -->
+  <div class="view-transition" id="viewTransition" aria-hidden="true">
+    <span class="vt-sweep"></span>
+    <img class="vt-lion" src="assets/lion-emblem.png" alt="" />
+  </div>
+
+  <!-- ========================= CUSTOM CURSOR (desktop, decorative) ========================= -->
+  <div class="cursor-ring" id="cursorRing" aria-hidden="true"></div>
+  <div class="cursor-dot" id="cursorDot" aria-hidden="true"></div>
+
+  <!-- ========================= TOP NAV ========================= -->
+  <header class="topnav" id="topnav">
+    <button class="brand" data-view-link="landing" aria-label="Urban Kings — home">
+      <!-- SVG LOGO INTEGRATION POINT #3: navbar mark -->
+      <img src="assets/lion-emblem.png" alt="Urban Kings logo" />
+      <span class="brand-text">URBAN KINGS</span>
+    </button>
+    <nav class="view-tabs" aria-label="Switch view">
+      <button data-view-link="landing" class="is-active">Home</button>
+      <button data-view-link="booking">Booking</button>
+      <button data-view-link="admin">Admin</button>
+    </nav>
+    <button class="nav-signin" id="nav-signin" data-view-link="login">Sign In</button>
+    <button class="nav-user" id="nav-user" aria-label="Open your portal">
+      <div class="nu-av" id="nav-user-av">—</div>
+      <span id="nav-user-name">User</span>
+    </button>
+  </header>
+
+  <main>
+
+    <!-- ===================================================
+         VIEW: LANDING
+         =================================================== -->
+    <section class="view view-landing">
+
+      <!-- HERO -->
+      <section class="hero" id="hero">
+        <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
+        <div class="hero-inner">
+          <img class="hero-logo" src="assets/urban-kings-logo-clean.png" alt="Urban Kings — chrome lion emblem and wordmark" />
+          <div class="eyebrow">The Latin Barber Kingdom · Brisbane City</div>
+          <h1 class="chrome-text">URBAN KINGS</h1>
+          <p class="tagline">Strong like kings, wild as lions.</p>
+          <p class="subtitle">Premium barber experience crafted with precision, style and confidence. Latin vibes, chrome detail and king energy in the heart of Brisbane.</p>
+          <div class="hero-ctas">
+            <button class="btn btn-gold btn-lg" data-view-link="booking" data-ripple>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+              Book Now
+            </button>
+            <button class="btn btn-ghost btn-lg" data-scroll-to="#services" data-ripple>
+              View Services
+            </button>
+          </div>
+          <div class="hero-location">
+            <span class="dot"></span>
+            Level 1, 123 Charlotte St — Brisbane City
+          </div>
+        </div>
+        <div class="scroll-hint"><span>Scroll</span><span class="line"></span></div>
+      </section>
+
+      <!-- Marquee -->
+      <div class="marquee" aria-hidden="true"><div class="marquee-track"></div></div>
+
+      <!-- ABOUT / EXPERIENCE -->
+      <section class="section" id="about">
+        <div class="container">
+          <div class="about-grid">
+            <div class="about-media reveal">
+              <!-- IMAGE REPLACE: swap for an atmosphere/portrait shot -->
+              <img src="assets/shop-interior.png" alt="Urban Kings barbershop interior — dark, chrome and gold atmosphere" loading="lazy" id="aboutImg" />
+            </div>
+            <div class="about-copy">
+              <span class="eyebrow reveal">The Experience</span>
+              <h2 class="reveal">Urban luxury,<br/><span class="gold-text">crafted by hand.</span></h2>
+              <p class="reveal">Urban Kings isn't just a barbershop — it's a kingdom. A dark, cinematic space where Latin energy meets chrome precision. Every fade is sculpted, every line is intentional, every visit is a ritual.</p>
+              <p class="reveal">Our barbers speak English, Español and Português, so you're always understood. Music, conversation and craftsmanship — mi casa es tu casa, but with sharp fades.</p>
+              <ul class="about-points">
+                <li class="reveal"><span class="k">✦</span><span><b>Precision</b> — detailed fades and clean lines, every time.</span></li>
+                <li class="reveal"><span class="k">✦</span><span><b>Atmosphere</b> — premium dark interior with the best vibes in the CBD.</span></li>
+                <li class="reveal"><span class="k">✦</span><span><b>Community</b> — a multicultural home for Brisbane's kings.</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BENEFITS -->
+      <section class="section" id="why">
+        <div class="watermark"><img src="assets/lion-emblem.png" alt="" aria-hidden="true" /></div>
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">Why Urban Kings</span>
+            <h2 class="chrome-text">More than a cut.<br/>A king experience.</h2>
+            <p>Latin barbers, multilingual service and a premium atmosphere built to make you feel at home.</p>
+          </div>
+          <div class="benefits-grid" id="benefits-grid"></div>
+        </div>
+      </section>
+
+      <!-- SERVICES -->
+      <section class="section" id="services">
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">Services</span>
+            <h2>Choose your crown</h2>
+            <p>Honest prices, king quality. Add-ons available, student discount all year round.</p>
+          </div>
+          <div class="services-grid" id="services-grid"></div>
+        </div>
+      </section>
+
+      <!-- HOW IT WORKS -->
+      <section class="section" id="how">
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">How it works</span>
+            <h2>Three steps to king</h2>
+            <p>Book in seconds, live the experience, walk out fresh.</p>
+          </div>
+          <div class="steps" id="steps"></div>
+        </div>
+      </section>
+
+      <!-- GALLERY / ATMOSPHERE -->
+      <section class="section" id="gallery-section">
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">Atmosphere</span>
+            <h2 class="gold-text">Inside the kingdom</h2>
+            <p>Lighting, detail and mood. Drop your own shots in here — the layout is ready.</p>
+          </div>
+          <div class="gallery" id="gallery"></div>
+        </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="section" id="stats-section">
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">The kingdom in numbers</span>
+            <h2 class="gold-text">Reputation you can see</h2>
+          </div>
+          <div class="stats" id="stats"></div>
+        </div>
+      </section>
+
+      <!-- TESTIMONIALS -->
+      <section class="section" id="testimonials">
+        <div class="container">
+          <div class="section-head">
+            <span class="eyebrow">What the kings say</span>
+            <h2>Reviews from the crown</h2>
+          </div>
+        </div>
+        <div class="testi-track-wrap"><div class="testi-track" id="testi-track"></div></div>
+      </section>
+
+      <!-- FINAL CTA -->
+      <section class="section" id="book">
+        <div class="container">
+          <div class="cta-banner reveal">
+            <img class="cta-lion" src="assets/lion-emblem.png" alt="" aria-hidden="true" />
+            <span class="eyebrow">Book your appointment</span>
+            <h2 class="chrome-text">Ready to look<br/><span class="gold-text">like a king?</span></h2>
+            <p>Secure your chair in under 30 seconds. Instant confirmation, automatic reminder.</p>
+            <div class="hero-ctas">
+              <button class="btn btn-gold" data-view-link="booking" data-ripple>Book Now</button>
+              <button class="btn btn-ghost" data-view-link="admin" data-ripple>Admin Panel</button>
+            </div>
+            <div class="cta-contacts">
+              <a href="https://wa.me/61400000000" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1112 20zm4.4-6c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1-.6.8-.8 1-.3.2-.5.1a6.5 6.5 0 01-1.9-1.2 7.2 7.2 0 01-1.3-1.7c-.1-.2 0-.3.1-.4l.4-.5.2-.4v-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a1 1 0 00-.7.3 3 3 0 00-.9 2.2 5.2 5.2 0 001.1 2.7 12 12 0 004.6 4c.6.3 1.1.4 1.5.5a3.6 3.6 0 001.6.1c.5-.1 1.4-.6 1.6-1.1s.2-1 .1-1.1z"/></svg>
+                WhatsApp
+              </a>
+              <a href="tel:+61400000000">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.6A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.9a2 2 0 01-.5 2.1L8.1 9.9a16 16 0 006 6l1.2-1.2a2 2 0 012.1-.4c.9.3 1.9.6 2.9.7a2 2 0 011.7 2z"/></svg>
+                Call
+              </a>
+              <a href="#" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>
+                Instagram
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FOOTER -->
+      <footer class="foot">
+        <div class="container">
+          <div class="foot-grid">
+            <div>
+              <div class="brand-line">
+                <img src="assets/lion-emblem.png" alt="Urban Kings logo" />
+                <span class="t">URBAN KINGS</span>
+              </div>
+              <p class="muted" style="max-width:340px;">The Latin Barber Kingdom. Strong like kings, wild as lions — premium fades and king confidence in Brisbane City.</p>
+              <div class="script" style="font-size:1.3rem;color:var(--gold-soft);margin-top:10px;">Mi casa, es tu casa</div>
+            </div>
+            <div>
+              <h4>Visit</h4>
+              <ul>
+                <li>Level 1 / 123 Charlotte St</li>
+                <li>Brisbane City, QLD</li>
+                <li>Latin Hub</li>
+              </ul>
+              <h4 style="margin-top:22px;">Hours</h4>
+              <ul>
+                <li>Mon–Fri · 9:00 – 19:00</li>
+                <li>Sat · 9:00 – 17:00</li>
+                <li>Sun · By appointment</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Connect</h4>
+              <ul>
+                <li><a href="https://wa.me/61400000000" target="_blank" rel="noopener">WhatsApp</a></li>
+                <li><a href="tel:+61400000000">+61 4XX XXX XXX</a></li>
+                <li><a href="#" target="_blank" rel="noopener">@urbankings.brisbane</a></li>
+              </ul>
+              <h4 style="margin-top:22px;">Explore</h4>
+              <ul>
+                <li><button data-view-link="booking">Booking</button></li>
+                <li><button data-view-link="admin">Admin</button></li>
+              </ul>
+            </div>
+          </div>
+          <div class="copy">
+            <span>© 2026 Urban Kings · Brisbane City</span>
+            <span class="dim">Preview · demo data · not connected to production</span>
+          </div>
+        </div>
+      </footer>
+    </section>
+
+    <!-- ===================================================
+         VIEW: BOOKING (client portal)
+         =================================================== -->
+    <section class="view view-booking">
+      <div class="app">
+        <section class="greeting">
+          <div class="avatar" id="client-initials">MH</div>
+          <div>
+            <div class="hello">Welcome back,</div>
+            <div class="name">King <span id="client-name">Mateo</span></div>
+            <div class="member"><span class="dot" style="background:var(--gold);"></span> King Member</div>
+          </div>
+        </section>
+
+        <section class="next-card">
+          <span class="label">Next appointment</span>
+          <h3 id="next-service">Top Kings — Skin Fade</h3>
+          <div class="when">
+            <div><small>Date</small><b id="next-date">22 may 2026</b></div>
+            <div><small>Time</small><b id="next-time">17:30</b></div>
+            <div><small>Barber</small><b id="next-barber">Carlos</b></div>
+          </div>
+          <div class="place">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22s7-7.2 7-12a7 7 0 10-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            <span id="next-location">Level 1, 123 Charlotte St</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-gold btn-sm" data-ripple>Confirm</button>
+            <button class="btn btn-ghost btn-sm" data-ripple>Reschedule</button>
+          </div>
+        </section>
+
+        <div class="quick">
+          <a href="#book-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>Book</a>
+          <a href="#pay-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>Pay</a>
+          <a href="#notifications-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8a6 6 0 1112 0v5l1.5 3h-15L6 13V8z"/><path d="M10 19a2 2 0 004 0"/></svg>Alerts</a>
+          <a href="#profile-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg>Profile</a>
+        </div>
+
+        <section class="loyalty card-gold card reveal">
+          <h3>King Pass · Loyalty</h3>
+          <p class="progress-text" id="loyalty-text">7 of 10 stamps</p>
+          <div class="stamps" id="stamps"></div>
+        </section>
+
+        <div class="app-heading" id="book-section"><h2>Visit history</h2><button>See all</button></div>
+        <div class="list" id="history-list"></div>
+
+        <div class="app-heading" id="pay-section"><h2>Payment history</h2><button>Export</button></div>
+        <div class="list" id="payments-list"></div>
+
+        <div class="app-heading" id="notifications-section"><h2>Notifications</h2><button>Mark read</button></div>
+        <div class="list" id="notif-list"></div>
+
+        <div class="app-heading" id="profile-section"><h2>Account</h2><button>Edit</button></div>
+        <section class="card reveal" id="profile-card"></section>
+      </div>
+
+      <nav class="bottom-nav" aria-label="App navigation">
+        <button class="is-active" data-section="#book-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1v-9z"/></svg>Home</button>
+        <button data-section="#book-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>Booking</button>
+        <button data-section="#pay-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>Pay</button>
+        <button data-section="#profile-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg>Profile</button>
+      </nav>
+    </section>
+
+    <!-- ===================================================
+         VIEW: ADMIN
+         =================================================== -->
+    <section class="view view-admin">
+      <div class="admin-app">
+        <section class="admin-top">
+          <div>
+            <div class="hello">Welcome, Manager</div>
+            <h1 class="chrome-text">The Kingdom · Today</h1>
+            <div class="date">Tuesday, 19 May 2026 · Brisbane City</div>
+          </div>
+          <div class="controls">
+            <button class="is-active">Today</button>
+            <button>Week</button>
+            <button>Month</button>
+            <button>Year</button>
+          </div>
+        </section>
+
+        <section class="kpis">
+          <div class="kpi gold"><div class="label">Revenue today</div><div class="value" id="kpi-today" data-count="0" data-prefix="$">$0</div><div class="delta up">▲ 12.4% vs yesterday</div></div>
+          <div class="kpi"><div class="label">Revenue week</div><div class="value" id="kpi-week" data-count="0" data-prefix="$">$0</div><div class="delta up">▲ 8.1%</div></div>
+          <div class="kpi"><div class="label">Revenue month</div><div class="value" id="kpi-month" data-count="0" data-prefix="$">$0</div><div class="delta up">▲ 18.6%</div></div>
+          <div class="kpi"><div class="label">Active clients</div><div class="value" id="kpi-active" data-count="0">0</div><div class="delta up">▲ <span id="kpi-new" data-count="0">0</span> new</div></div>
+        </section>
+
+        <section class="kpis" style="margin-top:12px;">
+          <div class="kpi"><div class="label">Services completed</div><div class="value" id="kpi-done" data-count="0">0</div><div class="delta up">today</div></div>
+          <div class="kpi"><div class="label">Pending payments</div><div class="value" id="kpi-pending" data-count="0">0</div><div class="delta down">needs attention</div></div>
+          <div class="kpi"><div class="label">Occupancy</div><div class="value" id="kpi-occ" data-count="0" data-suffix="%">0%</div><div class="delta up">avg chair</div></div>
+          <div class="kpi"><div class="label">Week rating</div><div class="value">4.9 ★</div><div class="delta up">62 new reviews</div></div>
+        </section>
+
+        <div class="admin-grid">
+          <div class="col">
+            <section class="panel reveal chart-wrap">
+              <div class="panel-head"><h3>Weekly revenue</h3><button>Export CSV</button></div>
+              <svg id="chart" class="chart-svg" preserveAspectRatio="none"></svg>
+              <div class="chart-legend"><span><i class="swatch" style="background:var(--gold);"></i>Daily revenue (AUD)</span><span class="dim">Demo data</span></div>
+            </section>
+            <section class="panel reveal" style="margin-top:16px;">
+              <div class="panel-head"><h3>Top clients</h3><button>View all</button></div>
+              <div class="clients" id="clients"></div>
+            </section>
+          </div>
+          <div class="col">
+            <section class="panel reveal">
+              <div class="panel-head"><h3>Upcoming · today</h3><button>Agenda</button></div>
+              <div class="upcoming" id="upcoming"></div>
+            </section>
+            <section class="panel reveal" style="margin-top:16px;">
+              <div class="panel-head"><h3>Recent activity</h3><button>Logs</button></div>
+              <div class="activity" id="activity"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <nav class="bottom-nav" aria-label="Admin navigation">
+        <button class="is-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1v-9z"/></svg>Dashboard</button>
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>Agenda</button>
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3"/><path d="M2 21c1-3 4-5 7-5s6 2 7 5"/><circle cx="18" cy="9" r="2.5"/></svg>Clients</button>
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l5-5 4 4 8-9"/><path d="M14 7h7v7"/></svg>Reports</button>
+      </nav>
+    </section>
+
+    <!-- ===================================================
+         VIEW: LOGIN (Auth — Admin / Barber / Customer)
+         =================================================== -->
+    <section class="view view-login" id="view-login" aria-label="Sign in">
+      <div class="auth-bg-lion" aria-hidden="true">
+        <img src="assets/lion-emblem.png" alt="" />
+      </div>
+      <div style="width:100%;display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:20px;box-sizing:border-box;">
+        <div class="auth-card">
+          <button type="button" class="auth-lion-wrap" id="auth-logo-switch" aria-expanded="false" aria-controls="auth-roles" aria-label="Switch portal">
+            <img src="assets/lion-emblem.png" alt="Urban Kings" />
+          </button>
+          <div class="auth-brand">URBAN KINGS</div>
+          <div class="auth-subtitle" id="auth-portal-label">Customer Portal</div>
+
+          <div class="auth-roles" id="auth-roles" hidden>
+            <button class="is-active" data-auth-role="customer">Customer Portal</button>
+            <button data-auth-role="barber">Barber Portal</button>
+            <button data-auth-role="admin">Admin Portal</button>
+          </div>
+
+          <form class="auth-form" id="auth-form" novalidate autocomplete="on">
+            <div class="auth-field">
+              <label for="auth-username">Email or username</label>
+              <input type="text" id="auth-username" autocomplete="username" placeholder="Enter email or username" spellcheck="false" />
+            </div>
+            <div class="auth-field">
+              <label for="auth-password">Password</label>
+              <div class="pw-wrap">
+                <input type="password" id="auth-password" autocomplete="current-password" placeholder="Enter password" />
+                <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Toggle password visibility">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="auth-error" id="auth-error" role="alert" aria-live="polite"></div>
+            <div class="auth-success" id="auth-success" role="status" aria-live="polite"></div>
+            <button type="submit" class="btn btn-gold" id="auth-submit" data-ripple>
+              <span id="auth-submit-label">Sign In</span>
+              <span class="auth-spinner" id="auth-spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+
+          <details class="auth-hint" id="auth-hint-details">
+            <summary>Demo credentials</summary>
+            <div class="auth-hint-body" id="auth-hint-body">
+              <!-- filled by JS -->
+            </div>
+          </details>
+
+          <div class="auth-back-row">
+            <button class="auth-back-btn" id="auth-back">← Back to site</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         VIEW: ADMIN PORTAL (auth-gated)
+         =================================================== -->
+    <section class="view view-admin-portal" id="view-admin-portal">
+      <header class="portal-header">
+        <div class="portal-brand">
+          <img src="assets/lion-emblem.png" alt="Urban Kings" />
+          <div>
+            <div class="portal-role-badge">Admin</div>
+            <div class="portal-user-name" id="ap-user-name">—</div>
+          </div>
+        </div>
+        <nav class="portal-nav" id="ap-nav">
+          <button class="is-active" data-ptab="ap-overview">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Overview
+          </button>
+          <button data-ptab="ap-barbers">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3"/><path d="M2 21c1-3 4-5 7-5s6 2 7 5"/><circle cx="18" cy="9" r="2.5"/><path d="M16 21c.5-2 2-3.5 4-4"/></svg>
+            Barbers
+          </button>
+          <button data-ptab="ap-customers">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg>
+            Customers
+          </button>
+          <button data-ptab="ap-bookings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+            Bookings
+          </button>
+          <button data-ptab="ap-roster" data-route="/admin/roster">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 9h18M8 14h.01M12 14h.01M16 14h.01"/></svg>
+            Roster
+          </button>
+          <button data-ptab="ap-notifications">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 1112 0v5l2 3H4l2-3V8z"/><path d="M10 19a2 2 0 004 0"/></svg>
+            Notifications
+          </button>
+        </nav>
+        <button class="btn btn-ghost btn-sm portal-logout" id="ap-logout">Sign Out</button>
+      </header>
+      <div class="portal-body">
+        <div class="portal-pane is-active" id="ap-overview"><div class="portal-page" id="ap-overview-inner"></div></div>
+        <div class="portal-pane" id="ap-barbers"><div class="portal-page" id="ap-barbers-inner"></div></div>
+        <div class="portal-pane" id="ap-customers"><div class="portal-page" id="ap-customers-inner"></div></div>
+        <div class="portal-pane" id="ap-bookings"><div class="portal-page" id="ap-bookings-inner"></div></div>
+        <div class="portal-pane" id="ap-roster"><div class="portal-page" id="ap-roster-inner"></div></div>
+        <div class="portal-pane" id="ap-notifications"><div class="portal-page" id="ap-notifications-inner"></div></div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         VIEW: BARBER PORTAL (auth-gated)
+         =================================================== -->
+    <section class="view view-barber-portal" id="view-barber-portal">
+      <header class="portal-header">
+        <div class="portal-brand">
+          <img src="assets/lion-emblem.png" alt="Urban Kings" />
+          <div>
+            <div class="portal-role-badge barber">Barber</div>
+            <div class="portal-user-name" id="bp-user-name">—</div>
+          </div>
+        </div>
+        <nav class="portal-nav" id="bp-nav">
+          <button class="is-active" data-ptab="bp-today">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            Today
+          </button>
+          <button data-ptab="bp-bookings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+            My Bookings
+          </button>
+          <button data-ptab="bp-profile">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg>
+            Profile
+          </button>
+          <button data-ptab="bp-roster">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>
+            Roster
+          </button>
+          <button data-ptab="bp-notifications">
+            <span class="portal-tab-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 1112 0v5l2 3H4l2-3V8z"/><path d="M10 19a2 2 0 004 0"/></svg>
+              <span class="notif-badge" id="bp-notif-badge" hidden>0</span>
+            </span>
+            Alerts
+          </button>
+        </nav>
+        <button class="btn btn-ghost btn-sm portal-logout" id="bp-logout">Sign Out</button>
+      </header>
+      <div class="portal-body">
+        <div class="portal-pane is-active" id="bp-today"><div class="portal-page" id="bp-today-inner"></div></div>
+        <div class="portal-pane" id="bp-bookings"><div class="portal-page" id="bp-bookings-inner"></div></div>
+        <div class="portal-pane" id="bp-profile"><div class="portal-page" id="bp-profile-inner"></div></div>
+        <div class="portal-pane" id="bp-roster"><div class="portal-page" id="bp-roster-inner"></div></div>
+        <div class="portal-pane" id="bp-notifications"><div class="portal-page" id="bp-notifications-inner"></div></div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         VIEW: CUSTOMER PORTAL (auth-gated)
+         =================================================== -->
+    <section class="view view-customer-portal" id="view-customer-portal">
+      <header class="portal-header" style="justify-content:space-between;">
+        <div class="portal-brand">
+          <img src="assets/lion-emblem.png" alt="Urban Kings" />
+          <div>
+            <div class="portal-role-badge customer">King Member</div>
+            <div class="portal-user-name" id="cp-user-name">—</div>
+          </div>
+        </div>
+        <div class="portal-actions">
+          <div class="portal-notif-pill" id="cp-notif-pill" hidden>0 unread</div>
+          <button class="btn btn-ghost btn-sm portal-logout" id="cp-logout">Sign Out</button>
+        </div>
+      </header>
+      <div class="portal-page customer-page" id="cp-body"></div>
+    </section>
+
+  </main>
+
+  <script src="js/data.js"></script>
+  <script src="js/users-data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

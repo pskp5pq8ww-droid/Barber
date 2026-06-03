@@ -1,0 +1,182 @@
+/* ===================== Admin dashboard ===================== */
+.admin-app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 78px 16px 140px;
+}
+@media (min-width: 900px) { .admin-app { padding: 100px 28px 60px; } }
+
+/* Top greeting */
+.admin-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.admin-top .hello { font-family: "JHC Audemars", serif; font-size: 0.74rem; letter-spacing: 0.22em; color: var(--text-mute); text-transform: uppercase; }
+.admin-top h1 { font-size: clamp(1.7rem, 4.5vw, 2.4rem); letter-spacing: 0.04em; margin-top: 4px; }
+.admin-top .date { color: var(--text-dim); font-size: 0.92rem; margin-top: 6px; }
+
+.admin-top .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-top .controls button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  font-family: "JHC Audemars", serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: color .2s, border-color .2s, background .2s;
+}
+.admin-top .controls button.is-active {
+  color: var(--gold-1);
+  border-color: var(--line-strong);
+  background: rgba(212,175,55,0.08);
+}
+
+/* KPI cards */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 700px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+
+.kpi {
+  position: relative;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.kpi.gold {
+  border-color: var(--line-strong);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(212,175,55,0.15), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+}
+.kpi .label {
+  font-family: "JHC Audemars", serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.kpi .value {
+  margin-top: 8px;
+  font-family: "Magazine", serif;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: 0.02em;
+}
+.kpi.gold .value { background: linear-gradient(180deg, #fdeaa6, #c89a2c 70%, #8a6815); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.kpi .delta { margin-top: 6px; font-size: 0.78rem; }
+.kpi .delta.up { color: var(--success); }
+.kpi .delta.down { color: var(--danger); }
+
+/* Two-col layout */
+.admin-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 22px;
+}
+@media (min-width: 1024px) {
+  .admin-grid {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+
+.panel {
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid var(--line);
+}
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+.panel-head h3 { font-size: 1.1rem; letter-spacing: 0.06em; }
+.panel-head a, .panel-head button { font-family: "JHC Audemars", serif; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-1); }
+
+/* Chart */
+.chart-wrap { position: relative; }
+.chart-svg { width: 100%; height: 220px; display: block; }
+.chart-legend {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.chart-legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+/* Activity feed */
+.activity { display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto; padding-right: 6px; }
+.activity-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.activity-item .avatar {
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #d4af37, #6c4b0c);
+  color: #1a1300;
+  font-family: "Magazine", serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.activity-item .body { flex: 1; min-width: 0; font-size: 0.9rem; }
+.activity-item .body b { font-weight: 500; }
+.activity-item .body .who { color: var(--gold-1); }
+.activity-item .body .t { color: var(--text-mute); font-size: 0.74rem; margin-top: 2px; }
+.activity-item .amount { font-family: "JHC Audemars", serif; font-weight: 700; color: var(--gold-1); font-size: 0.95rem; }
+
+/* Clients table */
+.clients {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.client-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.client-row .avatar {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #f6d785, #a07a1f);
+  color: #1a1300;
+  font-family: "Magazine", serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.client-row .info b { display: block; font-weight: 500; font-size: 0.95rem; }
+.client-row .info small { color: var(--text-mute); font-size: 0.78rem; }
+.client-row .spent { font-family: "JHC Audemars", serif; font-weight: 700; color: var(--gold-1); }
+
+/* Upcoming list */
+.upcoming { display: flex; flex-direction: column; gap: 8px; }
+.upcoming-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.upcoming-row .time { font-family: "Magazine", serif; font-size: 1.05rem; color: var(--gold-1); }
+.upcoming-row b { display: block; font-weight: 500; font-size: 0.92rem; }
+.upcoming-row small { color: var(--text-mute); font-size: 0.78rem; }
