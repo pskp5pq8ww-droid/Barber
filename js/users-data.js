@@ -203,8 +203,9 @@ window.UK_USERS = (function () {
   ];
 
   /* =========================================================
-     BOOKING SCHEMA: { id, customerId, barberId, service, date,
-                       time, duration, price, status, notes, createdAt }
+     BOOKING SCHEMA: { id, customerId, guest, barberId, service, date,
+                       time, duration, price, status, paymentStatus,
+                       notes, createdAt }
      status: "confirmed" | "pending" | "completed" | "cancelled"
      ========================================================= */
   const bookings = [
@@ -279,6 +280,18 @@ window.UK_USERS = (function () {
   ];
 
   /* =========================================================
+     PAYMENT SCHEMA:
+     { id, bookingId, customerId, guestEmail, amount, status,
+       provider, createdAt, updatedAt }
+     Mock-only. Replace with Square/Stripe provider calls later.
+     ========================================================= */
+  const payments = [
+    { id:"pay001", bookingId:"bk001", customerId:"c001", guestEmail:"", amount:60, status:"pending", provider:"mock", createdAt:"2026-05-15T10:00:00+10:00", updatedAt:"2026-05-15T10:00:00+10:00" },
+    { id:"pay002", bookingId:"bk004", customerId:"c001", guestEmail:"", amount:60, status:"paid", provider:"mock", createdAt:"2026-05-10T10:00:00+10:00", updatedAt:"2026-05-28T14:50:00+10:00" },
+    { id:"pay003", bookingId:"bk005", customerId:"c002", guestEmail:"", amount:80, status:"paid", provider:"mock", createdAt:"2026-05-12T10:00:00+10:00", updatedAt:"2026-05-27T15:55:00+10:00" },
+  ];
+
+  /* =========================================================
      ROSTER SHIFT SCHEMA:
      { id, barberId, barberName, date, startTime, endTime,
        status, notes, createdByAdminId, createdAt, updatedAt }
@@ -295,6 +308,7 @@ window.UK_USERS = (function () {
   const DEMO_TODAY = "2026-05-28";
   const BOOKING_STATUSES = ["pending", "confirmed", "in_progress", "completed", "cancelled", "rescheduled"];
   const ROSTER_STATUSES = ["scheduled", "day_off", "unavailable", "completed", "cancelled"];
+  const PAYMENT_STATUSES = ["pending", "paid", "cancelled", "failed"];
 
   function _now() {
     return new Date().toISOString();
@@ -319,6 +333,7 @@ window.UK_USERS = (function () {
       ...b,
       customer: customers.find(c => c.id === b.customerId),
       barber: barbers.find(ba => ba.id === b.barberId),
+      payment: payments.find(p => p.bookingId === b.id) || null,
     };
   }
 
@@ -384,12 +399,88 @@ window.UK_USERS = (function () {
   function getBarberById(id)   { return barbers.find(b => b.id === id) || null; }
   function getCustomerById(id) { return customers.find(c => c.id === id) || null; }
 
-  function createBarberUser(adminId, payload) {
-    const username = (payload.username || payload.email || payload.name || "")
+  function _normalizeUsername(payload) {
+    return (payload.username || payload.email || payload.name || "")
       .trim()
       .toLowerCase()
       .split("@")[0]
       .replace(/[^a-z0-9]/g, "");
+  }
+
+  function _initials(name) {
+    return (name || "UK").split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+  }
+
+  function createCustomerUser(adminId, payload = {}) {
+    const username = _normalizeUsername(payload);
+    if (!payload.name || !payload.email || !username) return { ok: false, error: "Name and email are required." };
+    if (customers.some(c => c.username === username || c.email.toLowerCase() === payload.email.toLowerCase())) {
+      return { ok: false, error: "A customer with this username or email already exists." };
+    }
+    const customer = {
+      id: _id("c", customers),
+      username,
+      passwordHash: _h(payload.password || "customer123"),
+      name: payload.name.trim(),
+      email: payload.email.trim(),
+      phone: payload.phone || "",
+      role: "customer",
+      status: payload.status || "active",
+      avatar: _initials(payload.name),
+      createdAt: DEMO_TODAY,
+      updatedAt: DEMO_TODAY,
+      profile: {
+        loyaltyStamps: 0,
+        totalVisits: 0,
+        totalSpent: 0,
+        memberTier: "New Member",
+        preferredBarber: payload.preferredBarber || "",
+        preferredService: payload.preferredService || "",
+      },
+      createdByAdminId: adminId || "self",
+    };
+    customers.push(customer);
+    return { ok: true, customer: _clone(customer) };
+  }
+
+  function registerCustomer(payload = {}) {
+    const email = (payload.email || "").trim().toLowerCase();
+    const password = payload.password || "";
+    if (!payload.name || !email || !payload.phone || !password) return { ok: false, error: "Please complete required fields." };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Please enter a valid email." };
+    if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
+    if (payload.confirmPassword !== undefined && password !== payload.confirmPassword) return { ok: false, error: "Passwords do not match." };
+    return createCustomerUser("self", {
+      name: payload.name,
+      email,
+      phone: payload.phone,
+      password,
+      status: "active",
+    });
+  }
+
+  function updateCustomerUser(customerId, updates = {}) {
+    const customer = getCustomerById(customerId);
+    if (!customer) return { ok: false, error: "Customer not found." };
+    if (updates.email && customers.some(c => c.id !== customerId && c.email.toLowerCase() === updates.email.toLowerCase())) {
+      return { ok: false, error: "Email already exists." };
+    }
+    ["name", "email", "phone", "status"].forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(updates, key)) customer[key] = updates[key];
+    });
+    if (updates.preferredBarber !== undefined) customer.profile.preferredBarber = updates.preferredBarber;
+    if (updates.preferredService !== undefined) customer.profile.preferredService = updates.preferredService;
+    customer.avatar = _initials(customer.name);
+    customer.updatedAt = DEMO_TODAY;
+    return { ok: true, customer: _clone(customer) };
+  }
+
+  function deactivateCustomerUser(customerId) {
+    return updateCustomerUser(customerId, { status: "inactive" });
+  }
+
+  function createBarberUser(adminId, payload) {
+    const username = _normalizeUsername(payload);
     if (!payload.name || !payload.email || !username) return { ok: false, error: "Name and email are required." };
     if (barbers.some(b => b.username === username || b.email.toLowerCase() === payload.email.toLowerCase())) {
       return { ok: false, error: "A barber with this username or email already exists." };
@@ -404,7 +495,7 @@ window.UK_USERS = (function () {
       phone: payload.phone || "",
       role: "barber",
       status: payload.status || "active",
-      avatar: payload.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase(),
+      avatar: _initials(payload.name),
       createdAt: DEMO_TODAY,
       updatedAt: DEMO_TODAY,
       profile: {
@@ -447,7 +538,8 @@ window.UK_USERS = (function () {
   }
 
   function getServices() {
-    return [...new Set(bookings.map(b => b.service))].sort();
+    const publicServices = (window.UK && Array.isArray(window.UK.services)) ? window.UK.services.map(s => s.name) : [];
+    return [...new Set([...bookings.map(b => b.service), ...publicServices])].sort();
   }
 
   function getBookingStatuses() {
@@ -527,16 +619,113 @@ window.UK_USERS = (function () {
       createdAt: _now(),
     });
 
-    _createNotification({
-      senderId: barberId,
-      receiverId: booking.customerId,
-      receiverRole: "customer",
-      title: "Your booking has been updated",
-      message: `${barber ? barber.displayName : "Your barber"} updated your appointment for ${booking.date} at ${booking.time}. Please check your customer portal.`,
-      type: "booking_update",
-    });
+    if (booking.customerId) {
+      _createNotification({
+        senderId: barberId,
+        receiverId: booking.customerId,
+        receiverRole: "customer",
+        title: "Your booking has been updated",
+        message: `${barber ? barber.displayName : "Your barber"} updated your appointment for ${booking.date} at ${booking.time}. Please check your customer portal.`,
+        type: "booking_update",
+      });
+    }
 
     return { ok: true, booking: decorated };
+  }
+
+  function createBooking(payload = {}) {
+    const serviceName = payload.service || payload.serviceName || "";
+    const publicService = window.UK && Array.isArray(window.UK.services)
+      ? window.UK.services.find(s => s.name === serviceName)
+      : null;
+    if (!serviceName || !payload.date || !payload.time) return { ok: false, error: "Please complete service, date and time." };
+    if (!payload.customerId && (!payload.guest || !payload.guest.name || !payload.guest.email || !payload.guest.phone)) {
+      return { ok: false, error: "Please add guest contact details or sign in." };
+    }
+    const barberId = payload.barberId === "any" || !payload.barberId
+      ? ((barbers.find(b => b.status === "active") || {}).id || "")
+      : payload.barberId;
+    const booking = {
+      id: _id("bk", bookings),
+      customerId: payload.customerId || null,
+      guest: payload.customerId ? null : {
+        name: payload.guest.name.trim(),
+        email: payload.guest.email.trim(),
+        phone: payload.guest.phone.trim(),
+      },
+      barberId,
+      service: serviceName,
+      date: payload.date,
+      time: payload.time,
+      duration: Number(payload.duration || (publicService ? publicService.duration : 45)),
+      price: Number(payload.price || (publicService ? publicService.price : 0)),
+      status: payload.status || "pending",
+      paymentStatus: "pending",
+      notes: payload.notes || "",
+      createdAt: _now(),
+      updatedAt: _now(),
+    };
+    bookings.push(booking);
+    return { ok: true, booking: _decorateBooking(booking) };
+  }
+
+  function createPayment(payload = {}) {
+    const booking = bookings.find(b => b.id === payload.bookingId);
+    if (!booking) return { ok: false, error: "Booking not found." };
+    const payment = {
+      id: _id("pay", payments),
+      bookingId: booking.id,
+      customerId: booking.customerId || null,
+      guestEmail: booking.guest ? booking.guest.email : "",
+      amount: Number(payload.amount || booking.price || 0),
+      status: payload.status || "pending",
+      provider: payload.provider || "mock",
+      createdAt: _now(),
+      updatedAt: _now(),
+    };
+    payments.push(payment);
+    booking.paymentStatus = payment.status;
+    return { ok: true, payment: _clone(payment) };
+  }
+
+  function updatePaymentStatus(paymentId, status) {
+    if (!PAYMENT_STATUSES.includes(status)) return { ok: false, error: "Invalid payment status." };
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment) return { ok: false, error: "Payment not found." };
+    payment.status = status;
+    payment.updatedAt = _now();
+    const booking = bookings.find(b => b.id === payment.bookingId);
+    if (booking) {
+      booking.paymentStatus = status;
+      if (status === "paid" && booking.status === "pending") booking.status = "confirmed";
+      if (booking.customerId && status === "paid") {
+        _createNotification({
+          senderId: "system",
+          receiverId: booking.customerId,
+          receiverRole: "customer",
+          title: "Booking confirmed",
+          message: `Your ${booking.service} booking for ${booking.date} at ${booking.time} is confirmed.`,
+          type: "booking_update",
+        });
+      }
+    }
+    return { ok: true, payment: _clone(payment), booking: booking ? _decorateBooking(booking) : null };
+  }
+
+  function getAllPayments() {
+    return payments.map(p => ({
+      ..._clone(p),
+      booking: _decorateBooking(bookings.find(b => b.id === p.bookingId) || {}),
+      customer: p.customerId ? getCustomerById(p.customerId) : null,
+    }));
+  }
+
+  function getPaymentsForCustomer(customerId) {
+    return getAllPayments().filter(p => p.customerId === customerId);
+  }
+
+  function getPaymentStatuses() {
+    return [...PAYMENT_STATUSES];
   }
 
   function getBookingChangeLog() {
@@ -657,6 +846,16 @@ window.UK_USERS = (function () {
     createBarberUser,
     updateBarberUser,
     deactivateBarberUser,
+    createCustomerUser,
+    registerCustomer,
+    updateCustomerUser,
+    deactivateCustomerUser,
+    createBooking,
+    createPayment,
+    updatePaymentStatus,
+    getAllPayments,
+    getPaymentsForCustomer,
+    getPaymentStatuses,
     getBookingsForBarber,
     getBookingsForCustomer,
     getBarberById,

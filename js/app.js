@@ -16,6 +16,70 @@
 
   /* Active role on the login screen */
   let _authRole = "customer";
+  let _bookingStep = 1;
+  let _bookingDraft = {
+    service: "",
+    barberId: "any",
+    date: "",
+    time: "",
+    mode: "guest",
+    guest: { name: "", email: "", phone: "" },
+    notes: "",
+  };
+
+  const ROUTES = {
+    "/": { view: "landing" },
+    "/index.html": { view: "landing" },
+    "/admin": { view: "admin-portal", role: "admin", tab: "ap-overview" },
+    "/admin/login": { view: "login", role: "admin" },
+    "/admin/dashboard": { view: "admin-portal", role: "admin", tab: "ap-overview" },
+    "/admin/users": { view: "admin-portal", role: "admin", tab: "ap-customers" },
+    "/admin/barbers": { view: "admin-portal", role: "admin", tab: "ap-barbers" },
+    "/admin/bookings": { view: "admin-portal", role: "admin", tab: "ap-bookings" },
+    "/admin/payments": { view: "admin-portal", role: "admin", tab: "ap-payments" },
+    "/admin/roster": { view: "admin-portal", role: "admin", tab: "ap-roster" },
+    "/barber/login": { view: "login", role: "barber" },
+    "/barber/dashboard": { view: "barber-portal", role: "barber", tab: "bp-today" },
+    "/barber/bookings": { view: "barber-portal", role: "barber", tab: "bp-bookings" },
+    "/barber/profile": { view: "barber-portal", role: "barber", tab: "bp-profile" },
+    "/barber/schedule": { view: "barber-portal", role: "barber", tab: "bp-roster" },
+    "/customer/login": { view: "login", role: "customer" },
+    "/customer/register": { view: "register" },
+    "/customer/dashboard": { view: "customer-portal", role: "customer" },
+    "/customer/bookings": { view: "customer-portal", role: "customer" },
+    "/customer/profile": { view: "customer-portal", role: "customer" },
+    "/book": { view: "booking" },
+    "/services": { view: "landing", scrollTo: "#services" },
+    "/checkout": { view: "checkout" },
+    "/payment-success": { view: "payment-success" },
+    "/payment-cancelled": { view: "payment-cancelled" },
+  };
+
+  const VIEW_PATHS = {
+    landing: "/",
+    booking: "/book",
+    login: "/customer/login",
+    register: "/customer/register",
+    checkout: "/checkout",
+    "payment-success": "/payment-success",
+    "payment-cancelled": "/payment-cancelled",
+    "admin-portal": "/admin/dashboard",
+    "barber-portal": "/barber/dashboard",
+    "customer-portal": "/customer/dashboard",
+  };
+
+  const PORTAL_TAB_PATHS = {
+    "ap-overview": "/admin/dashboard",
+    "ap-customers": "/admin/users",
+    "ap-barbers": "/admin/barbers",
+    "ap-bookings": "/admin/bookings",
+    "ap-payments": "/admin/payments",
+    "ap-roster": "/admin/roster",
+    "bp-today": "/barber/dashboard",
+    "bp-bookings": "/barber/bookings",
+    "bp-profile": "/barber/profile",
+    "bp-roster": "/barber/schedule",
+  };
 
   /* =====================================================
      RENDER — LANDING
@@ -80,49 +144,216 @@
   }
 
   /* =====================================================
-     RENDER — BOOKING (demo)
+     RENDER — PUBLIC BOOKING FLOW
      ===================================================== */
   function renderBooking() {
-    const c = UK.client; if (!c) return;
-    $("#client-initials").textContent = c.initials;
-    $("#client-name").textContent = c.name.split(" ")[0];
-    const a = c.nextAppointment;
-    $("#next-service").textContent = a.service;
-    $("#next-date").textContent = UK.fmt.date(a.date);
-    $("#next-time").textContent = a.time;
-    $("#next-barber").textContent = a.barber;
-    $("#next-location").textContent = a.location;
+    const host = $(".view-booking");
+    if (!host) return;
+    const services = (window.UK && Array.isArray(UK.services) ? UK.services : []).map(s => ({
+      name: s.name,
+      price: s.price,
+      duration: s.duration || 45,
+      blurb: s.blurb || "",
+    }));
+    const barbers = UK_USERS.getAllBarbers().filter(b => b.status === "active");
+    const today = _todayISO();
+    if (!_bookingDraft.date) _bookingDraft.date = today;
+    if (!_bookingDraft.time) _bookingDraft.time = "10:00";
+    if (!_bookingDraft.service && services[0]) _bookingDraft.service = services[0].name;
 
-    const total = 10;
-    $("#loyalty-text").textContent = `${c.loyaltyStamps} of ${total} stamps · ${total - c.loyaltyStamps} to go for a free cut`;
-    $("#stamps").innerHTML = Array.from({ length: total }, (_, i) =>
-      `<div class="stamp ${i < c.loyaltyStamps ? "is-on" : ""}">${i < c.loyaltyStamps ? "★" : i + 1}</div>`).join("");
+    const activeSession = Auth.getSession();
+    const selectedService = services.find(s => s.name === _bookingDraft.service) || services[0] || { name:"Service", price:0, duration:45 };
+    const selectedBarber = _bookingDraft.barberId === "any" ? null : UK_USERS.getBarberById(_bookingDraft.barberId);
 
-    $("#history-list").innerHTML = c.history.map(h => `
-      <div class="row-item reveal"><div class="meta"><b>${h.service}</b><small>${UK.fmt.date(h.date)} · ${h.barber}</small></div>
-      <span class="tag success">${h.status}</span><div class="price">${UK.fmt.money(h.price)}</div></div>`).join("");
+    host.innerHTML = `
+      <div class="booking-flow-shell">
+        <header class="booking-flow-head">
+          <button class="mini-action" data-route-link="/">Back</button>
+          <div>
+            <div class="eyebrow mini">Urban Kings Booking</div>
+            <h1>Book your next cut</h1>
+          </div>
+          <button class="btn btn-ghost btn-sm" data-route-link="/customer/login">Login</button>
+        </header>
 
-    $("#payments-list").innerHTML = c.payments.map(p => `
-      <div class="row-item reveal"><div class="meta"><b>${UK.fmt.money(p.amount)}</b><small>${UK.fmt.date(p.date)} · ${p.method}</small></div>
-      <span class="tag success">${p.status}</span></div>`).join("");
+        <div class="booking-progress" aria-label="Booking steps">
+          ${[1,2,3,4,5].map(n => `<button class="${_bookingStep === n ? "is-active" : ""} ${_bookingStep > n ? "is-done" : ""}" data-book-step="${n}">${n}</button>`).join("")}
+        </div>
 
-    const ni = {
-      reminder: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 8a6 6 0 1112 0v5l1.5 3h-15L6 13V8z"/><path d="M10 19a2 2 0 004 0"/></svg>',
-      promo:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 4L8 16l-4-4M20 4l-2 8"/></svg>',
-      loyalty:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z"/></svg>',
-    };
-    $("#notif-list").innerHTML = c.notifications.map(n => `
-      <div class="notif reveal"><div class="ic">${ni[n.type] || ni.reminder}</div>
-      <div><b>${n.title}</b><p>${n.body}</p><div class="t">${n.time}</div></div></div>`).join("");
+        <section class="booking-step-card">
+          ${_renderBookingStep(_bookingStep, services, barbers, selectedService, selectedBarber, activeSession)}
+        </section>
 
-    $("#profile-card").innerHTML = `
-      <h3 style="margin-bottom:8px;">Your profile</h3>
-      <div class="field"><span class="k">Name</span><span class="v">${c.name}</span></div>
-      <div class="field"><span class="k">Email</span><span class="v">${c.email}</span></div>
-      <div class="field"><span class="k">Phone</span><span class="v">${c.phone}</span></div>
-      <div class="field"><span class="k">Member since</span><span class="v">${UK.fmt.date(c.joined)}</span></div>
-      <div class="field"><span class="k">Membership</span><span class="v"><span class="tag">${c.member}</span></span></div>
-      <div class="field"><span class="k">ID</span><span class="v dim">${c.id}</span></div>`;
+        <aside class="booking-summary-card">
+          <div class="pt-panel-head"><h3>Summary</h3></div>
+          <div class="summary-line"><span>Service</span><b>${_escapeHTML(selectedService.name)}</b></div>
+          <div class="summary-line"><span>Barber</span><b>${selectedBarber ? _escapeHTML(selectedBarber.displayName) : "Any available"}</b></div>
+          <div class="summary-line"><span>Date</span><b>${_fmtDate(_bookingDraft.date)}</b></div>
+          <div class="summary-line"><span>Time</span><b>${_bookingDraft.time}</b></div>
+          <div class="summary-line"><span>Duration</span><b>${selectedService.duration} min</b></div>
+          <div class="summary-total"><span>Total</span><b>${_money(selectedService.price)}</b></div>
+          <p class="panel-copy">Availability is mock-ready. Backend connection should later check rostered barbers, service skills and open time windows.</p>
+        </aside>
+      </div>`;
+
+    bindBookingFlowEvents(services);
+  }
+
+  function _renderBookingStep(step, services, barbers, selectedService, selectedBarber, activeSession) {
+    if (step === 1) return `
+      <div class="step-title"><span>Step 1</span><h2>Select service</h2></div>
+      <div class="service-choice-grid">
+        ${services.map(s => `
+          <button class="service-choice ${_bookingDraft.service === s.name ? "is-active" : ""}" data-pick-service="${_escapeHTML(s.name)}">
+            <span>${_escapeHTML(s.name)}</span>
+            <small>${s.duration} min · ${_money(s.price)}</small>
+          </button>`).join("")}
+      </div>
+      <div class="step-actions"><button class="btn btn-gold" data-book-next>Continue</button></div>`;
+
+    if (step === 2) return `
+      <div class="step-title"><span>Step 2</span><h2>Select barber</h2></div>
+      <div class="barber-choice-list">
+        <button class="barber-choice ${_bookingDraft.barberId === "any" ? "is-active" : ""}" data-pick-barber="any">
+          <div class="bp-avatar">UK</div><div><b>Any available barber</b><small>Fastest available option</small></div>
+        </button>
+        ${barbers.map(b => `
+          <button class="barber-choice ${_bookingDraft.barberId === b.id ? "is-active" : ""}" data-pick-barber="${b.id}">
+            <div class="bp-avatar">${b.avatar}</div><div><b>${_escapeHTML(b.name)}</b><small>${_escapeHTML(b.profile.specialties.slice(0,2).join(" · "))}</small></div>
+          </button>`).join("")}
+      </div>
+      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-next>Continue</button></div>`;
+
+    if (step === 3) return `
+      <div class="step-title"><span>Step 3</span><h2>Date and time</h2></div>
+      <form class="portal-form compact-form">
+        <div class="form-grid two">
+          <label>Date <input id="book-date" type="date" min="${_todayISO()}" value="${_bookingDraft.date}" /></label>
+          <label>Time <input id="book-time" type="time" value="${_bookingDraft.time}" /></label>
+        </div>
+        <label>Notes <textarea id="book-notes" rows="3" placeholder="Optional notes for your barber">${_escapeHTML(_bookingDraft.notes || "")}</textarea></label>
+      </form>
+      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-next>Continue</button></div>`;
+
+    if (step === 4) return `
+      <div class="step-title"><span>Step 4</span><h2>Continue</h2></div>
+      <div class="account-choice-grid">
+        <button class="account-choice ${activeSession && activeSession.role === "customer" ? "is-active" : ""}" data-book-mode="customer">
+          <b>${activeSession && activeSession.role === "customer" ? "Use my customer account" : "Login / register"}</b>
+          <small>${activeSession && activeSession.role === "customer" ? activeSession.displayName : "Associate this booking to your profile"}</small>
+        </button>
+        <button class="account-choice ${_bookingDraft.mode === "guest" ? "is-active" : ""}" data-book-mode="guest">
+          <b>Continue as guest</b>
+          <small>No account required for booking and payment</small>
+        </button>
+      </div>
+      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-next>Continue</button></div>`;
+
+    return `
+      <div class="step-title"><span>Step 5</span><h2>Confirm details</h2></div>
+      ${activeSession && activeSession.role === "customer" && _bookingDraft.mode === "customer" ? `
+        <div class="pt-empty strong">Booking will be linked to ${_escapeHTML(activeSession.displayName)}.</div>` : `
+        <form class="portal-form compact-form" id="guest-details-form">
+          <div class="form-grid two">
+            <label>Name <input id="guest-name" type="text" value="${_escapeHTML(_bookingDraft.guest.name)}" placeholder="Full name" /></label>
+            <label>Email <input id="guest-email" type="email" value="${_escapeHTML(_bookingDraft.guest.email)}" placeholder="you@email.com" /></label>
+            <label>Phone <input id="guest-phone" type="tel" value="${_escapeHTML(_bookingDraft.guest.phone)}" placeholder="+61 ..." /></label>
+          </div>
+        </form>`}
+      <div class="form-feedback" id="booking-feedback" aria-live="polite"></div>
+      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-checkout>Continue to Checkout</button></div>`;
+  }
+
+  function bindBookingFlowEvents(services) {
+    const host = $(".view-booking");
+    if (!host) return;
+    host.querySelectorAll("[data-route-link]").forEach(btn => btn.addEventListener("click", () => goToRoute(btn.dataset.routeLink)));
+    host.querySelectorAll("[data-book-step]").forEach(btn => btn.addEventListener("click", () => {
+      _saveBookingInputs();
+      _bookingStep = Number(btn.dataset.bookStep);
+      renderBooking();
+    }));
+    host.querySelectorAll("[data-pick-service]").forEach(btn => btn.addEventListener("click", () => {
+      _bookingDraft.service = btn.dataset.pickService;
+      renderBooking();
+    }));
+    host.querySelectorAll("[data-pick-barber]").forEach(btn => btn.addEventListener("click", () => {
+      _bookingDraft.barberId = btn.dataset.pickBarber;
+      renderBooking();
+    }));
+    host.querySelectorAll("[data-book-mode]").forEach(btn => btn.addEventListener("click", () => {
+      const session = Auth.getSession();
+      if (btn.dataset.bookMode === "customer" && (!session || session.role !== "customer")) {
+        goToRoute("/customer/login");
+        return;
+      }
+      _bookingDraft.mode = btn.dataset.bookMode;
+      renderBooking();
+    }));
+    host.querySelector("[data-book-prev]")?.addEventListener("click", () => {
+      _saveBookingInputs();
+      _bookingStep = Math.max(1, _bookingStep - 1);
+      renderBooking();
+    });
+    host.querySelector("[data-book-next]")?.addEventListener("click", () => {
+      _saveBookingInputs();
+      _bookingStep = Math.min(5, _bookingStep + 1);
+      renderBooking();
+    });
+    host.querySelector("[data-book-checkout]")?.addEventListener("click", () => {
+      _saveBookingInputs();
+      const result = _createCheckoutFromDraft(services);
+      const feedback = $("#booking-feedback");
+      if (!result.ok) {
+        if (feedback) {
+          feedback.textContent = result.error;
+          feedback.className = "form-feedback error";
+        }
+        return;
+      }
+      sessionStorage.setItem("uk_checkout", JSON.stringify({ bookingId: result.booking.id, paymentId: result.payment.id }));
+      goToRoute("/checkout");
+    });
+  }
+
+  function _saveBookingInputs() {
+    const date = $("#book-date");
+    const time = $("#book-time");
+    const notes = $("#book-notes");
+    const guestName = $("#guest-name");
+    const guestEmail = $("#guest-email");
+    const guestPhone = $("#guest-phone");
+    if (date) _bookingDraft.date = date.value;
+    if (time) _bookingDraft.time = time.value;
+    if (notes) _bookingDraft.notes = notes.value.trim();
+    if (guestName) _bookingDraft.guest.name = guestName.value.trim();
+    if (guestEmail) _bookingDraft.guest.email = guestEmail.value.trim();
+    if (guestPhone) _bookingDraft.guest.phone = guestPhone.value.trim();
+  }
+
+  function _createCheckoutFromDraft(services) {
+    const session = Auth.getSession();
+    const selectedService = services.find(s => s.name === _bookingDraft.service);
+    const useCustomer = session && session.role === "customer" && _bookingDraft.mode === "customer";
+    const bookingResult = UK_USERS.createBooking({
+      customerId: useCustomer ? session.customerId : null,
+      guest: useCustomer ? null : _bookingDraft.guest,
+      barberId: _bookingDraft.barberId,
+      service: _bookingDraft.service,
+      date: _bookingDraft.date,
+      time: _bookingDraft.time,
+      duration: selectedService ? selectedService.duration : 45,
+      price: selectedService ? selectedService.price : 0,
+      notes: _bookingDraft.notes,
+    });
+    if (!bookingResult.ok) return bookingResult;
+    const paymentResult = UK_USERS.createPayment({
+      bookingId: bookingResult.booking.id,
+      amount: bookingResult.booking.price,
+      status: "pending",
+    });
+    if (!paymentResult.ok) return paymentResult;
+    return { ok: true, booking: bookingResult.booking, payment: paymentResult.payment };
   }
 
   /* =====================================================
@@ -203,6 +434,8 @@
     unavailable: "Unavailable",
     active: "Active",
     inactive: "Inactive",
+    paid: "Paid",
+    failed: "Failed",
   };
 
   function _escapeHTML(value = "") {
@@ -284,7 +517,8 @@
         nav.querySelectorAll("[data-ptab]").forEach(b => b.classList.remove("is-active"));
         btn.classList.add("is-active");
         const tabId = btn.dataset.ptab;
-        if (btn.dataset.route) history.replaceState(null, "", `#${btn.dataset.route}`);
+        const path = btn.dataset.route || PORTAL_TAB_PATHS[tabId];
+        if (path) history.replaceState({ path }, "", path);
         const portal = btn.closest(".view");
         portal.querySelectorAll(".portal-pane").forEach(p => p.classList.remove("is-active"));
         const pane = portal.querySelector(`#${tabId}`);
@@ -318,15 +552,14 @@
     bindPortalTabs("#ap-nav", {
       "ap-overview":  () => renderAdminOverview(),
       "ap-barbers":   () => renderAdminBarbers(session.adminId),
-      "ap-customers": () => renderAdminCustomers(),
+      "ap-customers": () => renderAdminCustomers(session.adminId),
       "ap-bookings":  () => renderAdminBookings("all"),
+      "ap-payments":  () => renderAdminPayments("all"),
       "ap-roster":    () => renderAdminRoster(session.adminId),
       "ap-notifications": () => renderAdminNotifications(session.adminId),
     });
 
-    if (location.hash === "#/admin/roster") {
-      setTimeout(() => $('#ap-nav [data-ptab="ap-roster"]')?.click(), 0);
-    }
+    _activatePendingTab();
   }
 
   function renderAdminOverview() {
@@ -334,17 +567,21 @@
     const bookings  = UK_USERS.getAllBookings();
     const barbers   = UK_USERS.getAllBarbers();
     const customers = UK_USERS.getAllCustomers();
+    const payments  = UK_USERS.getAllPayments();
 
     const revenue   = bookings.filter(b => b.status === "completed").reduce((s, b) => s + b.price, 0);
+    const paidRevenue = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
     const confirmed = bookings.filter(b => b.status === "confirmed").length;
     const pending   = bookings.filter(b => b.status === "pending").length;
+    const guestBookings = bookings.filter(b => b.guest).length;
+    const pendingPayments = payments.filter(p => p.status === "pending").length;
 
     el.innerHTML = `
       <div class="pt-kpis">
         <div class="pt-kpi gold">
-          <div class="kpi-label">Total Revenue</div>
-          <div class="kpi-val">${_money(revenue)}</div>
-          <div class="kpi-sub up">completed services</div>
+          <div class="kpi-label">Paid Revenue</div>
+          <div class="kpi-val">${_money(paidRevenue || revenue)}</div>
+          <div class="kpi-sub up">mock payments</div>
         </div>
         <div class="pt-kpi">
           <div class="kpi-label">Confirmed</div>
@@ -357,10 +594,22 @@
           <div class="kpi-sub${pending > 0 ? " down" : ""}">need attention</div>
         </div>
         <div class="pt-kpi">
-          <div class="kpi-label">Team</div>
-          <div class="kpi-val">${barbers.length} <span style="font-size:.9rem;color:var(--text-mute)">barbers</span></div>
-          <div class="kpi-sub">${customers.length} customers</div>
+          <div class="kpi-label">Customers</div>
+          <div class="kpi-val">${customers.length}</div>
+          <div class="kpi-sub">${guestBookings} guest bookings</div>
         </div>
+        <div class="pt-kpi">
+          <div class="kpi-label">Payments</div>
+          <div class="kpi-val">${pendingPayments}</div>
+          <div class="kpi-sub${pendingPayments ? " down" : ""}">pending</div>
+        </div>
+      </div>
+
+      <div class="quick-actions-row">
+        <button class="mini-action" data-admin-quick="ap-customers">Create Customer</button>
+        <button class="mini-action" data-admin-quick="ap-barbers">Create Barber</button>
+        <button class="mini-action" data-admin-quick="ap-bookings">View Bookings</button>
+        <button class="mini-action" data-admin-quick="ap-payments">Payments</button>
       </div>
 
       <div class="pt-grid">
@@ -402,6 +651,10 @@
           </div>
         </div>
       </div>`;
+
+    el.querySelectorAll("[data-admin-quick]").forEach(btn => btn.addEventListener("click", () => {
+      $(`#ap-nav [data-ptab="${btn.dataset.adminQuick}"]`)?.click();
+    }));
   }
 
   function renderAdminBarbers(adminId) {
@@ -585,12 +838,40 @@
     };
   }
 
-  function renderAdminCustomers() {
+  function renderAdminCustomers(adminId) {
     const el = $("#ap-customers-inner"); if (!el) return;
     const customers = UK_USERS.getAllCustomers();
+    const barbers = UK_USERS.getAllBarbers();
     el.innerHTML = `
       <div class="pt-panel">
-        <div class="pt-panel-head"><h3>All Customers (${customers.length})</h3></div>
+        <div class="pt-panel-head">
+          <h3>Create Customer</h3>
+          <span class="dim">Default password: customer123</span>
+        </div>
+        <form class="portal-form" id="create-customer-form">
+          <div class="form-grid two">
+            <label>Full name
+              <input id="new-customer-name" type="text" placeholder="Example: Sofia Morales" />
+            </label>
+            <label>Email
+              <input id="new-customer-email" type="email" placeholder="sofia@email.com" />
+            </label>
+            <label>Phone
+              <input id="new-customer-phone" type="tel" placeholder="+61 ..." />
+            </label>
+            <label>Preferred barber
+              <select id="new-customer-barber">
+                <option value="">No preference</option>
+                ${barbers.map(b => `<option value="${b.id}">${_escapeHTML(b.name)}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <div class="form-feedback" id="create-customer-feedback" aria-live="polite"></div>
+          <button class="btn btn-gold btn-sm" type="submit">Create Customer</button>
+        </form>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head"><h3>All Customers (${customers.length})</h3><span class="dim">Create, edit and deactivate users</span></div>
         <div class="pt-search">
           <input type="text" id="cust-search" placeholder="Search by name or email…" />
         </div>
@@ -598,14 +879,37 @@
           <table class="data-table" id="cust-table">
             <thead><tr>
               <th>Customer</th><th>Phone</th><th>Tier</th>
-              <th>Visits</th><th>Stamps</th><th>Total Spent</th><th>Preferred Barber</th>
+              <th>Visits</th><th>Stamps</th><th>Status</th><th>Preferred Barber</th><th>Bookings</th><th>Actions</th>
             </tr></thead>
             <tbody id="cust-tbody">
               ${_renderCustomerRows(customers)}
             </tbody>
           </table>
         </div>
-      </div>`;
+      </div>
+      <div class="modal-sheet" id="customer-edit-sheet" hidden></div>`;
+
+    const form = $("#create-customer-form");
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const result = UK_USERS.createCustomerUser(adminId, {
+          name: $("#new-customer-name").value.trim(),
+          email: $("#new-customer-email").value.trim(),
+          phone: $("#new-customer-phone").value.trim(),
+          preferredBarber: $("#new-customer-barber").value,
+        });
+        const feedback = $("#create-customer-feedback");
+        if (!result.ok) {
+          feedback.textContent = result.error;
+          feedback.className = "form-feedback error";
+          return;
+        }
+        feedback.textContent = "Customer created.";
+        feedback.className = "form-feedback success";
+        renderAdminCustomers(adminId);
+      });
+    }
 
     // Live search
     const search = $("#cust-search");
@@ -619,12 +923,23 @@
         if (tbody) tbody.innerHTML = _renderCustomerRows(filtered);
       });
     }
+
+    el.onclick = (e) => {
+      const editBtn = e.target.closest("[data-edit-customer]");
+      const deactivateBtn = e.target.closest("[data-deactivate-customer]");
+      if (editBtn) openCustomerEditSheet(adminId, editBtn.dataset.editCustomer);
+      if (deactivateBtn) {
+        UK_USERS.deactivateCustomerUser(deactivateBtn.dataset.deactivateCustomer);
+        renderAdminCustomers(adminId);
+      }
+    };
   }
 
   function _renderCustomerRows(customers) {
-    if (!customers.length) return `<tr><td colspan="7" style="text-align:center;color:var(--text-mute);padding:24px;">No customers found</td></tr>`;
+    if (!customers.length) return `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:24px;">No customers found</td></tr>`;
     return customers.map(c => {
       const barber = UK_USERS.getBarberById(c.profile.preferredBarber);
+      const bookings = UK_USERS.getBookingsForCustomer(c.id);
       return `
         <tr>
           <td>${_avChip(c.avatar, c.name, c.email)}</td>
@@ -632,10 +947,68 @@
           <td><span class="status-badge confirmed">${c.profile.memberTier}</span></td>
           <td>${c.profile.totalVisits}</td>
           <td>${c.profile.loyaltyStamps}/10</td>
-          <td>${_money(c.profile.totalSpent)}</td>
+          <td>${_statusBadge(c.status)}</td>
           <td class="dim">${barber ? barber.displayName : "—"}</td>
+          <td>${bookings.length}</td>
+          <td><div class="row-actions"><button class="mini-action" data-edit-customer="${c.id}">Edit</button><button class="mini-action danger" data-deactivate-customer="${c.id}">Deactivate</button></div></td>
         </tr>`;
     }).join("");
+  }
+
+  function openCustomerEditSheet(adminId, customerId) {
+    const sheet = $("#customer-edit-sheet");
+    const customer = UK_USERS.getCustomerById(customerId);
+    if (!sheet || !customer) return;
+    const barbers = UK_USERS.getAllBarbers();
+    sheet.hidden = false;
+    sheet.innerHTML = `
+      <div class="sheet-card">
+        <div class="sheet-head">
+          <div><h3>Edit Customer</h3><p>${_escapeHTML(customer.name)} · ${customer.id}</p></div>
+          <button class="mini-action" id="customer-edit-close">Close</button>
+        </div>
+        <form class="portal-form" id="customer-edit-form">
+          <div class="form-grid two">
+            <label>Full name <input id="edit-customer-name" type="text" value="${_escapeHTML(customer.name)}" /></label>
+            <label>Email <input id="edit-customer-email" type="email" value="${_escapeHTML(customer.email)}" /></label>
+            <label>Phone <input id="edit-customer-phone" type="tel" value="${_escapeHTML(customer.phone)}" /></label>
+            <label>Status
+              <select id="edit-customer-status">
+                <option value="active" ${customer.status === "active" ? "selected" : ""}>Active</option>
+                <option value="inactive" ${customer.status === "inactive" ? "selected" : ""}>Inactive</option>
+              </select>
+            </label>
+            <label>Preferred barber
+              <select id="edit-customer-barber">
+                <option value="">No preference</option>
+                ${barbers.map(b => `<option value="${b.id}" ${customer.profile.preferredBarber === b.id ? "selected" : ""}>${_escapeHTML(b.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Preferred service <input id="edit-customer-service" type="text" value="${_escapeHTML(customer.profile.preferredService || "")}" /></label>
+          </div>
+          <div class="form-feedback" id="customer-edit-feedback"></div>
+          <button class="btn btn-gold btn-sm" type="submit">Save Customer</button>
+        </form>
+      </div>`;
+    $("#customer-edit-close").onclick = () => { sheet.hidden = true; };
+    $("#customer-edit-form").onsubmit = (e) => {
+      e.preventDefault();
+      const result = UK_USERS.updateCustomerUser(customerId, {
+        name: $("#edit-customer-name").value.trim(),
+        email: $("#edit-customer-email").value.trim(),
+        phone: $("#edit-customer-phone").value.trim(),
+        status: $("#edit-customer-status").value,
+        preferredBarber: $("#edit-customer-barber").value,
+        preferredService: $("#edit-customer-service").value.trim(),
+      });
+      if (!result.ok) {
+        $("#customer-edit-feedback").textContent = result.error;
+        $("#customer-edit-feedback").className = "form-feedback error";
+        return;
+      }
+      sheet.hidden = true;
+      renderAdminCustomers(adminId);
+    };
   }
 
   function renderAdminBookings(filter) {
@@ -697,7 +1070,7 @@
     return filtered.map(b => `
       <tr>
         <td class="muted">${b.id}</td>
-        <td>${b.customer ? _avChip(b.customer.avatar, b.customer.name, "") : "—"}</td>
+        <td>${b.customer ? _avChip(b.customer.avatar, b.customer.name, "") : _guestChip(b.guest)}</td>
         <td>${b.barber ? _avChip(b.barber.avatar, b.barber.displayName, "") : "—"}</td>
         <td class="cell-main">${b.service}</td>
         <td class="dim">${_fmtDate(b.date)}</td>
@@ -705,6 +1078,64 @@
         <td>${_money(b.price)}</td>
         <td>${_statusBadge(b.status)}</td>
       </tr>`).join("");
+  }
+
+  function _guestChip(guest) {
+    if (!guest) return "—";
+    return _avChip("G", `${_escapeHTML(guest.name)} <span class="status-badge pending">Guest</span>`, guest.email);
+  }
+
+  function renderAdminPayments(filter = "all") {
+    const el = $("#ap-payments-inner"); if (!el) return;
+    const payments = UK_USERS.getAllPayments();
+    const counts = UK_USERS.getPaymentStatuses().reduce((acc, status) => {
+      acc[status] = payments.filter(p => p.status === status).length;
+      return acc;
+    }, {});
+    const paidTotal = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+    el.innerHTML = `
+      <div class="pt-kpis">
+        <div class="pt-kpi gold"><div class="kpi-label">Paid</div><div class="kpi-val">${_money(paidTotal)}</div><div class="kpi-sub">mock provider</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Pending</div><div class="kpi-val">${counts.pending || 0}</div><div class="kpi-sub">awaiting payment</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Failed</div><div class="kpi-val">${counts.failed || 0}</div><div class="kpi-sub">needs follow-up</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Cancelled</div><div class="kpi-val">${counts.cancelled || 0}</div><div class="kpi-sub">checkout cancelled</div></div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head"><h3>Payments (${payments.length})</h3><span class="dim">Ready for Square/Stripe connection</span></div>
+        <div class="filter-chips">
+          <button class="${filter === "all" ? "is-active" : ""}" data-pay-filter="all">All</button>
+          ${UK_USERS.getPaymentStatuses().map(status => `<button class="${filter === status ? "is-active" : ""}" data-pay-filter="${status}">${STATUS_LABELS[status]}</button>`).join("")}
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Payment</th><th>Booking</th><th>Customer</th><th>Service</th><th>Amount</th><th>Status</th><th>Provider</th><th>Updated</th></tr></thead>
+            <tbody id="payments-tbody">${_renderPaymentRows(payments, filter)}</tbody>
+          </table>
+        </div>
+      </div>`;
+    el.querySelectorAll("[data-pay-filter]").forEach(btn => {
+      btn.addEventListener("click", () => renderAdminPayments(btn.dataset.payFilter));
+    });
+  }
+
+  function _renderPaymentRows(payments, filter) {
+    const filtered = filter === "all" ? payments : payments.filter(p => p.status === filter);
+    if (!filtered.length) return `<tr><td colspan="8" style="text-align:center;color:var(--text-mute);padding:24px;">No payments found.</td></tr>`;
+    return filtered.map(p => {
+      const booking = p.booking || {};
+      const guest = booking.guest || null;
+      return `
+        <tr>
+          <td class="muted">${p.id}</td>
+          <td class="cell-main">${p.bookingId}</td>
+          <td>${p.customer ? _avChip(p.customer.avatar, p.customer.name, p.customer.email) : _guestChip(guest)}</td>
+          <td class="dim">${_escapeHTML(booking.service || "—")}</td>
+          <td>${_money(p.amount)}</td>
+          <td>${_statusBadge(p.status)}</td>
+          <td class="dim">${_escapeHTML(p.provider)}</td>
+          <td class="dim">${_fmtDateTime(p.updatedAt)}</td>
+        </tr>`;
+    }).join("");
   }
 
   function renderAdminNotifications(adminId, flash = "") {
@@ -1516,7 +1947,7 @@
 
       <!-- Profile -->
       <div class="pt-panel">
-        <div class="pt-panel-head"><h3>My Profile</h3><button class="btn btn-ghost btn-sm" disabled>Edit</button></div>
+        <div class="pt-panel-head"><h3>My Profile</h3><button class="btn btn-ghost btn-sm" id="cp-edit-profile">Edit</button></div>
         <div class="profile-field-list">
           <div class="profile-field"><div class="pf-key">Name</div><div class="pf-val">${customer.name}</div></div>
           <div class="profile-field"><div class="pf-key">Email</div><div class="pf-val">${customer.email}</div></div>
@@ -1525,6 +1956,15 @@
           <div class="profile-field"><div class="pf-key">Total visits</div><div class="pf-val">${p.totalVisits}</div></div>
           <div class="profile-field"><div class="pf-key">Member since</div><div class="pf-val">${_fmtDate(customer.createdAt)}</div></div>
         </div>
+        <form class="portal-form compact-form profile-edit-form" id="cp-profile-form" hidden>
+          <div class="form-grid two">
+            <label>Name <input id="cp-edit-name" type="text" value="${_escapeHTML(customer.name)}" /></label>
+            <label>Email <input id="cp-edit-email" type="email" value="${_escapeHTML(customer.email)}" /></label>
+            <label>Phone <input id="cp-edit-phone" type="tel" value="${_escapeHTML(customer.phone)}" /></label>
+          </div>
+          <div class="form-feedback" id="cp-profile-feedback"></div>
+          <button class="btn btn-gold btn-sm" type="submit">Save Profile</button>
+        </form>
       </div>
 
       <div class="pt-panel" style="margin-top:16px;">
@@ -1546,6 +1986,148 @@
         renderCustomerPortal(session);
       });
     });
+    $("#cp-edit-profile")?.addEventListener("click", () => {
+      const form = $("#cp-profile-form");
+      if (form) form.hidden = !form.hidden;
+    });
+    $("#cp-profile-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const result = UK_USERS.updateCustomerUser(session.customerId, {
+        name: $("#cp-edit-name").value.trim(),
+        email: $("#cp-edit-email").value.trim(),
+        phone: $("#cp-edit-phone").value.trim(),
+      });
+      if (!result.ok) {
+        $("#cp-profile-feedback").textContent = result.error;
+        $("#cp-profile-feedback").className = "form-feedback error";
+        return;
+      }
+      renderCustomerPortal(session);
+    });
+  }
+
+  /* =====================================================
+     RENDER — REGISTER / CHECKOUT / PAYMENT STATUS
+     ===================================================== */
+  function renderRegister() {
+    bindRouteLinks($("#view-register") || document);
+    const form = $("#register-form");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const error = $("#register-error");
+      const success = $("#register-success");
+      if (error) error.textContent = "";
+      if (success) success.textContent = "";
+      const result = UK_USERS.registerCustomer({
+        name: $("#register-name").value.trim(),
+        email: $("#register-email").value.trim(),
+        phone: $("#register-phone").value.trim(),
+        password: $("#register-password").value,
+        confirmPassword: $("#register-confirm").value,
+      });
+      if (!result.ok) {
+        if (error) error.textContent = result.error;
+        return;
+      }
+      const login = await Auth.login(result.customer.email, $("#register-password").value, "customer");
+      if (!login.ok) {
+        if (success) success.textContent = "Account created. Please sign in.";
+        goToRoute("/customer/login");
+        return;
+      }
+      if (success) success.textContent = "Account created.";
+      Views.inited["customer-portal"] = false;
+      updateNavAuthState();
+      goToRoute("/customer/dashboard");
+    });
+  }
+
+  function renderCheckout() {
+    const el = $("#checkout-body"); if (!el) return;
+    const checkout = _getCheckoutContext();
+    if (!checkout) {
+      el.innerHTML = `
+        <div class="status-icon muted">!</div>
+        <h1>No checkout found</h1>
+        <p class="panel-copy">Start a new booking to create a checkout session.</p>
+        <button class="btn btn-gold" data-route-link="/book">Book Now</button>`;
+      bindRouteLinks(el);
+      return;
+    }
+    const { booking, payment } = checkout;
+    el.innerHTML = `
+      <div class="route-card-head">
+        <button class="mini-action" data-route-link="/book">Back</button>
+        <div><div class="eyebrow mini">Checkout</div><h1>Confirm payment</h1></div>
+      </div>
+      <div class="checkout-summary">
+        <div class="summary-line"><span>Booking</span><b>${booking.id}</b></div>
+        <div class="summary-line"><span>Service</span><b>${_escapeHTML(booking.service)}</b></div>
+        <div class="summary-line"><span>Barber</span><b>${booking.barber ? _escapeHTML(booking.barber.displayName) : "Any available"}</b></div>
+        <div class="summary-line"><span>Date</span><b>${_fmtDate(booking.date)} · ${booking.time}</b></div>
+        <div class="summary-line"><span>Customer</span><b>${booking.customer ? _escapeHTML(booking.customer.name) : _escapeHTML((booking.guest || {}).name || "Guest")}</b></div>
+        <div class="summary-line"><span>Status</span><b>${_statusBadge(payment.status)}</b></div>
+        <div class="summary-total"><span>Total</span><b>${_money(payment.amount)}</b></div>
+      </div>
+      <div class="payment-actions">
+        <button class="btn btn-gold" id="mock-pay-now" data-ripple>Pay Demo</button>
+        <button class="btn btn-ghost" id="mock-cancel-payment">Cancel</button>
+      </div>
+      <p class="panel-copy">Payment provider is mocked. This can be swapped for Square, Stripe or another checkout API without changing the booking model.</p>`;
+    bindRouteLinks(el);
+    $("#mock-pay-now")?.addEventListener("click", () => {
+      UK_USERS.updatePaymentStatus(payment.id, "paid");
+      goToRoute("/payment-success");
+    });
+    $("#mock-cancel-payment")?.addEventListener("click", () => {
+      UK_USERS.updatePaymentStatus(payment.id, "cancelled");
+      goToRoute("/payment-cancelled");
+    });
+  }
+
+  function renderPaymentSuccess() {
+    const el = $("#payment-success-body"); if (!el) return;
+    const checkout = _getCheckoutContext();
+    const booking = checkout ? checkout.booking : null;
+    el.innerHTML = `
+      <div class="status-icon success">✓</div>
+      <h1>Payment completed</h1>
+      <p class="panel-copy">${booking ? `Booking ${booking.id} is confirmed for ${_fmtDate(booking.date)} at ${booking.time}.` : "Your payment was completed."}</p>
+      <div class="payment-actions">
+        <button class="btn btn-gold" data-route-link="/customer/dashboard">Customer Portal</button>
+        <button class="btn btn-ghost" data-route-link="/">Home</button>
+      </div>`;
+    bindRouteLinks(el);
+  }
+
+  function renderPaymentCancelled() {
+    const el = $("#payment-cancelled-body"); if (!el) return;
+    el.innerHTML = `
+      <div class="status-icon muted">×</div>
+      <h1>Payment cancelled</h1>
+      <p class="panel-copy">The booking is still pending. You can return to checkout or start again.</p>
+      <div class="payment-actions">
+        <button class="btn btn-gold" data-route-link="/checkout">Return to Checkout</button>
+        <button class="btn btn-ghost" data-route-link="/book">New Booking</button>
+      </div>`;
+    bindRouteLinks(el);
+  }
+
+  function _getCheckoutContext() {
+    let raw = "";
+    try { raw = sessionStorage.getItem("uk_checkout") || ""; } catch { raw = ""; }
+    if (!raw) return null;
+    try {
+      const ids = JSON.parse(raw);
+      const booking = UK_USERS.getAllBookings().find(b => b.id === ids.bookingId);
+      const payment = UK_USERS.getAllPayments().find(p => p.id === ids.paymentId);
+      if (!booking || !payment) return null;
+      return { booking, payment };
+    } catch {
+      return null;
+    }
   }
 
   /* =====================================================
@@ -1750,19 +2332,24 @@
     current: null,
     inited: {
       landing: false, booking: false, admin: false,
-      login: false,
+      login: false, register: false, checkout: false,
+      "payment-success": false, "payment-cancelled": false,
       "admin-portal": false, "barber-portal": false, "customer-portal": false,
     },
     _pendingRole: null,  // role pre-selected when navigating to login
+    _pendingTab: null,
+    _pendingScroll: null,
 
     show(name, withFlash = true) {
-      const valid = ["landing", "booking", "admin", "login", "admin-portal", "barber-portal", "customer-portal"];
+      const valid = ["landing", "booking", "admin", "login", "register", "checkout", "payment-success", "payment-cancelled", "admin-portal", "barber-portal", "customer-portal"];
       if (!valid.includes(name)) name = "landing";
       if (name === this.current) return;
 
       // Auth guards — route signed-in users back to their own portal.
       const activeSession = Auth.getSession();
       if (name.endsWith("-portal") && activeSession && name !== `${activeSession.role}-portal`) {
+        const ownPath = VIEW_PATHS[`${activeSession.role}-portal`];
+        if (ownPath) history.replaceState({ path: ownPath }, "", ownPath);
         this.show(`${activeSession.role}-portal`, withFlash);
         return;
       }
@@ -1797,6 +2384,10 @@
           if (name === "landing") renderLanding();
           if (name === "booking") renderBooking();
           if (name === "admin")   renderAdmin();
+          if (name === "register") renderRegister();
+          if (name === "checkout") renderCheckout();
+          if (name === "payment-success") renderPaymentSuccess();
+          if (name === "payment-cancelled") renderPaymentCancelled();
           if (name === "login") {
             const role = this._pendingRole || "customer";
             this._pendingRole = null;
@@ -1813,6 +2404,12 @@
           this.inited[name] = true;
         } else if (name === "admin") {
           renderChart();
+        } else if (["booking", "register", "checkout", "payment-success", "payment-cancelled"].includes(name)) {
+          if (name === "booking") renderBooking();
+          if (name === "register") renderRegister();
+          if (name === "checkout") renderCheckout();
+          if (name === "payment-success") renderPaymentSuccess();
+          if (name === "payment-cancelled") renderPaymentCancelled();
         }
 
         const sectionEl = document.querySelector(`.view-${name}`);
@@ -1828,6 +2425,12 @@
           else if (name === "login")   animateLogin();
           else animatePortal();
           if (ST) ST.refresh();
+          _activatePendingTab();
+          if (this._pendingScroll) {
+            const target = document.querySelector(this._pendingScroll);
+            if (target) target.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+            this._pendingScroll = null;
+          }
         });
 
         updateNavAuthState();
@@ -1837,6 +2440,47 @@
       else swap();
     },
   };
+
+  function routeForPath(pathname = location.pathname) {
+    const clean = pathname.replace(/\/+$/, "") || "/";
+    return ROUTES[clean] || null;
+  }
+
+  function goToRoute(path, withFlash = true) {
+    const route = ROUTES[path] || ROUTES["/"];
+    history.pushState({ path }, "", path);
+    applyRoute(route, withFlash);
+  }
+
+  function applyRoute(route, withFlash = true) {
+    if (!route) {
+      Views.show("landing", withFlash);
+      return;
+    }
+    if (route.role) Views._pendingRole = route.role;
+    if (route.tab) Views._pendingTab = route.tab;
+    if (route.scrollTo) Views._pendingScroll = route.scrollTo;
+    Views.show(route.view, withFlash);
+  }
+
+  function bindRouteLinks(scope = document) {
+    scope.querySelectorAll("[data-route-link]").forEach(el => {
+      if (el.dataset.routeBound === "1") return;
+      el.dataset.routeBound = "1";
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        goToRoute(el.dataset.routeLink);
+      });
+    });
+  }
+
+  function _activatePendingTab() {
+    if (!Views._pendingTab) return;
+    const tab = Views._pendingTab;
+    Views._pendingTab = null;
+    const btn = document.querySelector(`[data-ptab="${tab}"]`);
+    if (btn) setTimeout(() => btn.click(), 0);
+  }
 
   /* =====================================================
      MICROINTERACTIONS
@@ -1885,8 +2529,12 @@
       const mark = el.querySelector("img");
       if (mark && !REDUCED) gsap.fromTo(mark, { scale: 0.8 }, { scale: 1, duration: 0.5, ease: "back.out(2)" });
       if (el.id === "nav-signin") Views._pendingRole = "customer";
-      Views.show(el.dataset.viewLink);
+      const name = el.dataset.viewLink;
+      if (VIEW_PATHS[name]) goToRoute(VIEW_PATHS[name]);
+      else Views.show(name);
     }));
+
+    bindRouteLinks(document);
 
     $$("[data-scroll-to]").forEach(el => el.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1950,7 +2598,7 @@
 
     // Back to site button
     const backBtn = $("#auth-back");
-    if (backBtn) backBtn.addEventListener("click", () => Views.show("landing"));
+    if (backBtn) backBtn.addEventListener("click", () => goToRoute("/"));
 
     // Logout buttons
     const apLogout = $("#ap-logout");
@@ -1965,7 +2613,7 @@
       Views.inited["barber-portal"]   = false;
       Views.inited["customer-portal"] = false;
       updateNavAuthState();
-      Views.show("landing");
+      goToRoute("/");
     }
 
     if (apLogout) apLogout.addEventListener("click", doLogout);
@@ -2012,7 +2660,7 @@
         if (successEl) successEl.textContent = `Welcome to ${PORTAL_LABELS[role] || "your portal"}.`;
         Views.inited[`${role}-portal`] = false; // force fresh render
         updateNavAuthState();
-        Views.show(`${role}-portal`);
+        goToRoute(VIEW_PATHS[`${role}-portal`] || "/");
       });
     }
   }
@@ -2029,7 +2677,7 @@
     document.querySelectorAll("[data-view-link]").forEach(el => el.addEventListener("click", (e) => {
       e.preventDefault();
       const name = el.dataset.viewLink;
-      const valid = ["landing","booking","admin","login","admin-portal","barber-portal","customer-portal"];
+      const valid = ["landing","booking","admin","login","register","checkout","payment-success","payment-cancelled","admin-portal","barber-portal","customer-portal"];
       if (!valid.includes(name)) return;
       if (el.id === "nav-signin") _setAuthRole("customer");
 
@@ -2052,6 +2700,10 @@
       const session = Auth.getSession();
       if (name === "booking") renderBooking();
       if (name === "admin")   { renderAdmin(); document.querySelectorAll(".view-admin [data-count]").forEach(setCountFinal); }
+      if (name === "register") renderRegister();
+      if (name === "checkout") renderCheckout();
+      if (name === "payment-success") renderPaymentSuccess();
+      if (name === "payment-cancelled") renderPaymentCancelled();
       if (name === "admin-portal"    && session) renderAdminPortal(session);
       if (name === "barber-portal"   && session) renderBarberPortal(session);
       if (name === "customer-portal" && session) renderCustomerPortal(session);
@@ -2063,24 +2715,33 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    if (!gsap) { bootStatic(); bindAuth(); updateNavAuthState(); return; }
+    if (!gsap) {
+      bootStatic();
+      bindAuth();
+      updateNavAuthState();
+      return;
+    }
 
     bindNav();
     bindRipples();
     bindCursor();
     bindAuth();
     updateNavAuthState();
+    window.addEventListener("popstate", () => applyRoute(routeForPath(location.pathname), false));
 
     // If there's an active session resume their portal directly (skip landing)
     const existingSession = Auth.getSession();
+    const initialRoute = routeForPath(location.pathname);
 
     runPreloader(() => {
       Views.current = null;
-      if (existingSession) {
+      if (initialRoute) {
+        applyRoute(initialRoute, false);
+      } else if (existingSession) {
         const role = existingSession.role;
-        Views.show(`${role}-portal`, false);
+        goToRoute(VIEW_PATHS[`${role}-portal`] || "/", false);
       } else {
-        Views.show("landing", false);
+        applyRoute(ROUTES["/"], false);
       }
     });
   });

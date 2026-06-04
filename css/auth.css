@@ -305,6 +305,11 @@ details[open] .auth-hint summary::before { content: "▾ "; }
 /* Hide public topnav in portal + login views
    (portals have their own header) */
 body[data-view="login"]           #topnav,
+body[data-view="booking"]         #topnav,
+body[data-view="register"]        #topnav,
+body[data-view="checkout"]        #topnav,
+body[data-view="payment-success"] #topnav,
+body[data-view="payment-cancelled"] #topnav,
 body[data-view="admin-portal"]    #topnav,
 body[data-view="barber-portal"]   #topnav,
 body[data-view="customer-portal"] #topnav { display: none; }
@@ -1207,4 +1212,320 @@ body[data-view="customer-portal"] #topnav { display: none; }
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .auth-spinner { animation: none; }
+}
+
+/* ---- App routes: register, booking flow, checkout ---- */
+.auth-shell,
+.app-route-shell {
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(200,164,93,0.10), transparent 38%),
+    linear-gradient(180deg, #050506 0%, #0d0d10 100%);
+}
+
+.app-form-card {
+  max-width: 460px;
+}
+
+.booking-flow-shell {
+  min-height: 100dvh;
+  padding: 18px 16px 92px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  font-family: var(--font-body);
+}
+
+.booking-flow-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+}
+
+.booking-flow-head h1,
+.route-card h1,
+.status-card h1 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.booking-progress {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.035);
+  overflow-x: auto;
+}
+
+.booking-progress button {
+  width: 42px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-mute);
+  background: rgba(0,0,0,0.25);
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+
+.booking-progress button.is-active,
+.booking-progress button.is-done {
+  color: #15110a;
+  background: linear-gradient(135deg, var(--gold), var(--gold-soft));
+}
+
+.booking-step-card,
+.booking-summary-card,
+.route-card {
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035));
+  box-shadow: 0 24px 70px rgba(0,0,0,0.42);
+}
+
+.booking-step-card {
+  padding: 18px;
+  min-height: 420px;
+}
+
+.booking-summary-card {
+  padding: 18px;
+  align-self: start;
+  position: sticky;
+  top: 18px;
+}
+
+.step-title {
+  margin-bottom: 18px;
+}
+
+.step-title span {
+  display: block;
+  color: var(--gold-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.step-title h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.service-choice-grid,
+.account-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-choice,
+.account-choice,
+.barber-choice {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.24);
+  color: var(--text);
+  padding: 14px;
+  font-family: var(--font-body);
+  transition: border-color .2s ease, background .2s ease, transform .2s ease;
+}
+
+.service-choice:hover,
+.account-choice:hover,
+.barber-choice:hover,
+.service-choice.is-active,
+.account-choice.is-active,
+.barber-choice.is-active {
+  border-color: rgba(200,164,93,0.55);
+  background: rgba(200,164,93,0.10);
+}
+
+.service-choice span,
+.account-choice b,
+.barber-choice b {
+  display: block;
+  font-weight: 700;
+}
+
+.service-choice small,
+.account-choice small,
+.barber-choice small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-mute);
+  line-height: 1.45;
+}
+
+.barber-choice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.barber-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.step-actions,
+.payment-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.compact-form {
+  margin-top: 0;
+}
+
+.summary-line,
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-mute);
+}
+
+.summary-line b,
+.summary-total b {
+  color: var(--text);
+  text-align: right;
+}
+
+.summary-total {
+  border-bottom: none;
+  font-size: 1.08rem;
+}
+
+.summary-total b {
+  color: var(--gold-soft);
+  font-size: 1.25rem;
+}
+
+.route-card {
+  width: min(720px, 100%);
+  padding: 22px;
+  font-family: var(--font-body);
+}
+
+.route-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.checkout-summary {
+  margin-top: 12px;
+}
+
+.status-card {
+  text-align: center;
+}
+
+.status-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text);
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.status-icon.success {
+  color: #10120e;
+  background: linear-gradient(135deg, var(--gold), var(--gold-soft));
+}
+
+.status-icon.muted {
+  color: var(--text-mute);
+  background: rgba(255,255,255,0.04);
+}
+
+.quick-actions-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.profile-edit-form {
+  padding: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+@media (max-width: 860px) {
+  .booking-flow-shell {
+    display: block;
+    padding: 14px 12px 82px;
+  }
+
+  .booking-flow-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 8px 0;
+    background: linear-gradient(180deg, #050506 60%, rgba(5,5,6,0));
+  }
+
+  .booking-progress {
+    margin-bottom: 12px;
+  }
+
+  .booking-step-card {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .booking-summary-card {
+    position: static;
+    margin-top: 12px;
+  }
+
+  .service-choice-grid,
+  .account-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .step-actions .btn,
+  .payment-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .route-card {
+    padding: 18px;
+  }
 }

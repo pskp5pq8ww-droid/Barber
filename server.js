@@ -27,7 +27,15 @@ http.createServer((req, res) => {
   const filePath = path.join(ROOT, urlPath);
   if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end("Forbidden"); return; }
   fs.readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(404); res.end("Not found"); return; }
+    if (err) {
+      const fallback = path.join(ROOT, "index.html");
+      fs.readFile(fallback, (fallbackErr, fallbackData) => {
+        if (fallbackErr) { res.writeHead(404); res.end("Not found"); return; }
+        res.writeHead(200, { "Content-Type": TYPES[".html"] });
+        res.end(fallbackData);
+      });
+      return;
+    }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream" });
     res.end(data);
   });
