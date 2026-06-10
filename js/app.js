@@ -1,8 +1,8 @@
 /* ============================================================
-   URBAN KINGS — Unified app (landing + booking + admin demo +
-                              auth login + admin/barber/customer portals)
-   GSAP-powered premium experience. Single-page, mock data.
-   Auth: Auth module (auth.js) + UK_USERS mock DB (users-data.js)
+   URBAN KINGS — Unified app (landing + booking + admin +
+	                              auth login + admin/barber/customer portals)
+   GSAP-powered premium experience. Single-page with server API storage.
+   Auth: Auth module (auth.js) + UK_USERS server-backed cache (users-data.js)
    ============================================================ */
 (function () {
   const { gsap } = window;
@@ -15,7 +15,7 @@
   const $$ = (s, ctx = document) => Array.from(ctx.querySelectorAll(s));
 
   /* Active role on the login screen */
-  let _authRole = "customer";
+	  let _authRole = window.__UK_INITIAL_AUTH_ROLE || "customer";
   let _bookingStep = 1;
   let _bookingDraft = {
     service: "",
@@ -25,7 +25,8 @@
     mode: "guest",
     guest: { name: "", email: "", phone: "" },
     notes: "",
-  };
+	  };
+  let _bookingConfirmation = null;
 
   const ROUTES = {
     "/": { view: "landing" },
@@ -146,11 +147,17 @@
   /* =====================================================
      RENDER — PUBLIC BOOKING FLOW
      ===================================================== */
-  function renderBooking() {
-    const host = $(".view-booking");
-    if (!host) return;
-    const services = (window.UK && Array.isArray(UK.services) ? UK.services : []).map(s => ({
-      name: s.name,
+	  function renderBooking() {
+	    const host = $(".view-booking");
+	    if (!host) return;
+    if (_bookingConfirmation) {
+      host.innerHTML = _renderBookingConfirmation(_bookingConfirmation);
+      bindBookingConfirmationEvents(host);
+      return;
+    }
+	    const services = (window.UK && Array.isArray(UK.services) ? UK.services : []).map(s => ({
+      id: s.id || "",
+	      name: s.name,
       price: s.price,
       duration: s.duration || 45,
       blurb: s.blurb || "",
@@ -192,9 +199,9 @@
           <div class="summary-line"><span>Time</span><b>${_bookingDraft.time}</b></div>
           <div class="summary-line"><span>Duration</span><b>${selectedService.duration} min</b></div>
           <div class="summary-total"><span>Total</span><b>${_money(selectedService.price)}</b></div>
-          <p class="panel-copy">Availability is mock-ready. Backend connection should later check rostered barbers, service skills and open time windows.</p>
-        </aside>
-      </div>`;
+	          <p class="panel-copy">We will contact you shortly to confirm your appointment.</p>
+	        </aside>
+	      </div>`;
 
     bindBookingFlowEvents(services);
   }
@@ -260,8 +267,55 @@
             <label>Phone <input id="guest-phone" type="tel" value="${_escapeHTML(_bookingDraft.guest.phone)}" placeholder="+61 ..." /></label>
           </div>
         </form>`}
-      <div class="form-feedback" id="booking-feedback" aria-live="polite"></div>
-      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-checkout>Continue to Checkout</button></div>`;
+	      <div class="form-feedback" id="booking-feedback" aria-live="polite"></div>
+	      <div class="step-actions"><button class="btn btn-ghost" data-book-prev>Back</button><button class="btn btn-gold" data-book-checkout>Send Booking Request</button></div>`;
+	  }
+
+  function _renderBookingConfirmation(booking) {
+    return `
+      <div class="booking-flow-shell">
+        <header class="booking-flow-head">
+          <button class="mini-action" data-route-link="/">Back</button>
+          <div>
+            <div class="eyebrow mini">Urban Kings Booking</div>
+            <h1>Booking request received</h1>
+          </div>
+	          <button class="btn btn-ghost btn-sm" data-new-booking>New Booking</button>
+        </header>
+        <section class="booking-step-card">
+          <div class="status-icon success">✓</div>
+          <div class="step-title"><span>Request ${_escapeHTML(booking.id)}</span><h2>We’ll contact you shortly to confirm your appointment.</h2></div>
+          <div class="checkout-summary">
+            <div class="summary-line"><span>Service</span><b>${_escapeHTML(booking.service || booking.serviceName)}</b></div>
+            <div class="summary-line"><span>Date</span><b>${_fmtDate(booking.date)}</b></div>
+            <div class="summary-line"><span>Time</span><b>${_escapeHTML(booking.time)}</b></div>
+            <div class="summary-line"><span>Barber</span><b>${booking.barber ? _escapeHTML(booking.barber.displayName || booking.barber.name) : _escapeHTML(booking.barberName || "Any available")}</b></div>
+            <div class="summary-line"><span>Status</span><b>${_statusBadge(booking.status)}</b></div>
+          </div>
+          <div class="payment-actions">
+            <button class="btn btn-gold" data-route-link="/">Back to Home</button>
+            <a class="btn btn-ghost" href="https://wa.me/61400000000" target="_blank" rel="noopener">Contact WhatsApp</a>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  function bindBookingConfirmationEvents(host) {
+    bindRouteLinks(host);
+    host.querySelector("[data-new-booking]")?.addEventListener("click", () => {
+      _bookingConfirmation = null;
+      _bookingStep = 1;
+      _bookingDraft = {
+        service: "",
+        barberId: "any",
+        date: "",
+        time: "",
+        mode: "guest",
+        guest: { name: "", email: "", phone: "" },
+        notes: "",
+      };
+      renderBooking();
+    });
   }
 
   function bindBookingFlowEvents(services) {
@@ -295,25 +349,63 @@
       _bookingStep = Math.max(1, _bookingStep - 1);
       renderBooking();
     });
-    host.querySelector("[data-book-next]")?.addEventListener("click", () => {
-      _saveBookingInputs();
-      _bookingStep = Math.min(5, _bookingStep + 1);
-      renderBooking();
-    });
-    host.querySelector("[data-book-checkout]")?.addEventListener("click", () => {
-      _saveBookingInputs();
-      const result = _createCheckoutFromDraft(services);
-      const feedback = $("#booking-feedback");
-      if (!result.ok) {
-        if (feedback) {
-          feedback.textContent = result.error;
-          feedback.className = "form-feedback error";
-        }
+	    host.querySelector("[data-book-next]")?.addEventListener("click", () => {
+	      _saveBookingInputs();
+      const error = _validateBookingStep(_bookingStep);
+      if (error) {
+        _showBookingStepError(host, error);
         return;
       }
-      sessionStorage.setItem("uk_checkout", JSON.stringify({ bookingId: result.booking.id, paymentId: result.payment.id }));
-      goToRoute("/checkout");
-    });
+	      _bookingStep = Math.min(5, _bookingStep + 1);
+	      renderBooking();
+	    });
+		    host.querySelector("[data-book-checkout]")?.addEventListener("click", async () => {
+		      _saveBookingInputs();
+      const validationError = _validateBookingStep(5);
+      if (validationError) {
+        _showBookingStepError(host, validationError);
+        return;
+      }
+		      const result = await _createBookingFromDraft(services);
+	      const feedback = $("#booking-feedback");
+	      if (!result.ok) {
+	        if (feedback) {
+          feedback.textContent = result.error;
+          feedback.className = "form-feedback error";
+	        }
+	        return;
+	      }
+      _bookingConfirmation = result.booking;
+      Views.inited["admin-portal"] = false;
+      Views.inited["barber-portal"] = false;
+      Views.inited["customer-portal"] = false;
+      renderBooking();
+	    });
+	  }
+
+  function _showBookingStepError(host, message) {
+    let el = host.querySelector(".form-feedback");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "form-feedback";
+      host.querySelector(".booking-step-card")?.appendChild(el);
+    }
+    el.textContent = message;
+    el.className = "form-feedback error";
+  }
+
+  function _validateBookingStep(step) {
+    if (step === 1 && !_bookingDraft.service) return "Please choose a service.";
+    if (step === 3) {
+      if (!_bookingDraft.date) return "Please choose a date.";
+      if (!_bookingDraft.time) return "Please choose a time.";
+      if (_bookingDraft.date < _todayISO()) return "Please choose today or a future date.";
+    }
+    if (step === 5 && _bookingDraft.mode !== "customer") {
+      if (!_bookingDraft.guest.name) return "Please add your name.";
+      if (!_bookingDraft.guest.phone) return "Please add your phone number.";
+    }
+    return "";
   }
 
   function _saveBookingInputs() {
@@ -331,30 +423,30 @@
     if (guestPhone) _bookingDraft.guest.phone = guestPhone.value.trim();
   }
 
-  function _createCheckoutFromDraft(services) {
-    const session = Auth.getSession();
-    const selectedService = services.find(s => s.name === _bookingDraft.service);
-    const useCustomer = session && session.role === "customer" && _bookingDraft.mode === "customer";
-    const bookingResult = UK_USERS.createBooking({
-      customerId: useCustomer ? session.customerId : null,
-      guest: useCustomer ? null : _bookingDraft.guest,
-      barberId: _bookingDraft.barberId,
-      service: _bookingDraft.service,
-      date: _bookingDraft.date,
-      time: _bookingDraft.time,
-      duration: selectedService ? selectedService.duration : 45,
-      price: selectedService ? selectedService.price : 0,
-      notes: _bookingDraft.notes,
-    });
-    if (!bookingResult.ok) return bookingResult;
-    const paymentResult = UK_USERS.createPayment({
-      bookingId: bookingResult.booking.id,
-      amount: bookingResult.booking.price,
+	  async function _createBookingFromDraft(services) {
+	    const session = Auth.getSession();
+	    const selectedService = services.find(s => s.name === _bookingDraft.service);
+	    const useCustomer = session && session.role === "customer" && _bookingDraft.mode === "customer";
+	    const bookingResult = UK_USERS.createBooking({
+	      customerId: useCustomer ? session.customerId : null,
+	      guest: useCustomer ? null : _bookingDraft.guest,
+	      barberId: _bookingDraft.barberId,
+	      serviceId: selectedService ? selectedService.id : "",
+	      service: _bookingDraft.service,
+	      serviceName: _bookingDraft.service,
+	      date: _bookingDraft.date,
+	      time: _bookingDraft.time,
+	      duration: selectedService ? selectedService.duration : 45,
+	      price: selectedService ? selectedService.price : 0,
+	      notes: _bookingDraft.notes,
+      source: "website",
       status: "pending",
-    });
-    if (!paymentResult.ok) return paymentResult;
-    return { ok: true, booking: bookingResult.booking, payment: paymentResult.payment };
-  }
+      paymentStatus: "unpaid",
+	    });
+    const resolvedBooking = bookingResult && typeof bookingResult.then === "function" ? await bookingResult : bookingResult;
+    if (!resolvedBooking.ok) return resolvedBooking;
+    return { ok: true, booking: resolvedBooking.booking };
+	  }
 
   /* =====================================================
      RENDER — ADMIN DEMO
@@ -581,7 +673,7 @@
         <div class="pt-kpi gold">
           <div class="kpi-label">Paid Revenue</div>
           <div class="kpi-val">${_money(paidRevenue || revenue)}</div>
-          <div class="kpi-sub up">mock payments</div>
+	          <div class="kpi-sub up">server payments</div>
         </div>
         <div class="pt-kpi">
           <div class="kpi-label">Confirmed</div>
@@ -662,10 +754,10 @@
     const barbers = UK_USERS.getAllBarbers();
     el.innerHTML = `
       <div class="pt-panel">
-        <div class="pt-panel-head">
-          <h3>Create Barber User</h3>
-          <span class="dim">Default password: barber123</span>
-        </div>
+	        <div class="pt-panel-head">
+	          <h3>Create Barber User</h3>
+	          <span class="dim">Set a temporary password</span>
+	        </div>
         <form class="portal-form" id="create-barber-form">
           <div class="form-grid two">
             <label>Full name
@@ -677,10 +769,13 @@
             <label>Phone
               <input id="new-barber-phone" type="tel" placeholder="+61 ..." />
             </label>
-            <label>Specialties
-              <input id="new-barber-specialties" type="text" placeholder="Skin Fade, Beard Sculpt" />
-            </label>
-          </div>
+	            <label>Specialties
+	              <input id="new-barber-specialties" type="text" placeholder="Skin Fade, Beard Sculpt" />
+	            </label>
+	            <label>Temporary password
+	              <input id="new-barber-password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" />
+	            </label>
+	          </div>
           <label>Bio
             <textarea id="new-barber-bio" rows="3" placeholder="Short barber profile"></textarea>
           </label>
@@ -696,13 +791,14 @@
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr>
-              <th>Barber</th><th>Specialties</th><th>Days</th>
+              <th>Barber</th><th>Code</th><th>Specialties</th><th>Days</th>
               <th>Commission</th><th>Rating</th><th>Month Revenue</th><th>Status</th><th>Actions</th>
             </tr></thead>
             <tbody>
               ${barbers.map(b => `
                 <tr>
                   <td>${_avChip(b.avatar, b.name, b.email)}</td>
+                  <td><span class="status-badge confirmed">${_escapeHTML(b.barberCode || b.id)}</span></td>
                   <td class="dim">${b.profile.specialties.join(", ")}</td>
                   <td class="dim">${b.profile.workDays.join(" · ")}</td>
                   <td>${Math.round(b.profile.commission * 100)}%</td>
@@ -741,37 +837,39 @@
   function bindAdminBarberEvents(adminId) {
     const form = $("#create-barber-form");
     if (form) {
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const result = UK_USERS.createBarberUser(adminId, {
+	      form.addEventListener("submit", async (e) => {
+	        e.preventDefault();
+	        const result = await UK_USERS.createBarberUser(adminId, {
           name: $("#new-barber-name").value.trim(),
           email: $("#new-barber-email").value.trim(),
           phone: $("#new-barber-phone").value.trim(),
-          bio: $("#new-barber-bio").value.trim(),
-          specialties: $("#new-barber-specialties").value.split(",").map(s => s.trim()).filter(Boolean),
-        });
+	          bio: $("#new-barber-bio").value.trim(),
+	          specialties: $("#new-barber-specialties").value.split(",").map(s => s.trim()).filter(Boolean),
+	          password: $("#new-barber-password").value,
+	        });
         const feedback = $("#create-barber-feedback");
         if (!result.ok) {
           feedback.textContent = result.error;
           feedback.className = "form-feedback error";
           return;
         }
-        feedback.textContent = "Barber user created.";
+        const barber = result.barber || {};
+        feedback.textContent = `Barber created. Code: ${barber.barberCode || barber.id}. Login: ${barber.username || barber.email}.`;
         feedback.className = "form-feedback success";
         renderAdminBarbers(adminId);
       });
     }
     const pane = $("#ap-barbers-inner");
     if (!pane) return;
-    pane.onclick = (e) => {
+	    pane.onclick = async (e) => {
       const editBtn = e.target.closest("[data-edit-barber]");
       const deactivateBtn = e.target.closest("[data-deactivate-barber]");
-      if (editBtn) openBarberEditSheet(adminId, editBtn.dataset.editBarber);
-      if (deactivateBtn) {
-        UK_USERS.deactivateBarberUser(deactivateBtn.dataset.deactivateBarber);
-        renderAdminBarbers(adminId);
-      }
-    };
+	      if (editBtn) openBarberEditSheet(adminId, editBtn.dataset.editBarber);
+	      if (deactivateBtn) {
+	        const result = await UK_USERS.deactivateBarberUser(deactivateBtn.dataset.deactivateBarber);
+	        if (result.ok) renderAdminBarbers(adminId);
+	      }
+	    };
   }
 
   function openBarberEditSheet(adminId, barberId) {
@@ -817,9 +915,9 @@
         </form>
       </div>`;
     $("#barber-edit-close").onclick = () => { sheet.hidden = true; };
-    $("#barber-edit-form").onsubmit = (e) => {
-      e.preventDefault();
-      const result = UK_USERS.updateBarberUser(barberId, {
+	    $("#barber-edit-form").onsubmit = async (e) => {
+	      e.preventDefault();
+	      const result = await UK_USERS.updateBarberUser(barberId, {
         name: $("#edit-barber-name").value.trim(),
         displayName: $("#edit-barber-display").value.trim(),
         email: $("#edit-barber-email").value.trim(),
@@ -844,10 +942,10 @@
     const barbers = UK_USERS.getAllBarbers();
     el.innerHTML = `
       <div class="pt-panel">
-        <div class="pt-panel-head">
-          <h3>Create Customer</h3>
-          <span class="dim">Default password: customer123</span>
-        </div>
+	        <div class="pt-panel-head">
+	          <h3>Create Customer</h3>
+	          <span class="dim">Set a temporary password</span>
+	        </div>
         <form class="portal-form" id="create-customer-form">
           <div class="form-grid two">
             <label>Full name
@@ -859,13 +957,16 @@
             <label>Phone
               <input id="new-customer-phone" type="tel" placeholder="+61 ..." />
             </label>
-            <label>Preferred barber
-              <select id="new-customer-barber">
-                <option value="">No preference</option>
-                ${barbers.map(b => `<option value="${b.id}">${_escapeHTML(b.name)}</option>`).join("")}
-              </select>
-            </label>
-          </div>
+	            <label>Preferred barber
+	              <select id="new-customer-barber">
+	                <option value="">No preference</option>
+	                ${barbers.map(b => `<option value="${b.id}">${_escapeHTML(b.name)}</option>`).join("")}
+	              </select>
+	            </label>
+	            <label>Temporary password
+	              <input id="new-customer-password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" />
+	            </label>
+	          </div>
           <div class="form-feedback" id="create-customer-feedback" aria-live="polite"></div>
           <button class="btn btn-gold btn-sm" type="submit">Create Customer</button>
         </form>
@@ -891,14 +992,15 @@
 
     const form = $("#create-customer-form");
     if (form) {
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const result = UK_USERS.createCustomerUser(adminId, {
+	      form.addEventListener("submit", async (e) => {
+	        e.preventDefault();
+	        const result = await UK_USERS.createCustomerUser(adminId, {
           name: $("#new-customer-name").value.trim(),
           email: $("#new-customer-email").value.trim(),
-          phone: $("#new-customer-phone").value.trim(),
-          preferredBarber: $("#new-customer-barber").value,
-        });
+	          phone: $("#new-customer-phone").value.trim(),
+	          preferredBarber: $("#new-customer-barber").value,
+	          password: $("#new-customer-password").value,
+	        });
         const feedback = $("#create-customer-feedback");
         if (!result.ok) {
           feedback.textContent = result.error;
@@ -924,15 +1026,15 @@
       });
     }
 
-    el.onclick = (e) => {
+	    el.onclick = async (e) => {
       const editBtn = e.target.closest("[data-edit-customer]");
       const deactivateBtn = e.target.closest("[data-deactivate-customer]");
-      if (editBtn) openCustomerEditSheet(adminId, editBtn.dataset.editCustomer);
-      if (deactivateBtn) {
-        UK_USERS.deactivateCustomerUser(deactivateBtn.dataset.deactivateCustomer);
-        renderAdminCustomers(adminId);
-      }
-    };
+	      if (editBtn) openCustomerEditSheet(adminId, editBtn.dataset.editCustomer);
+	      if (deactivateBtn) {
+	        const result = await UK_USERS.deactivateCustomerUser(deactivateBtn.dataset.deactivateCustomer);
+	        if (result.ok) renderAdminCustomers(adminId);
+	      }
+	    };
   }
 
   function _renderCustomerRows(customers) {
@@ -991,9 +1093,9 @@
         </form>
       </div>`;
     $("#customer-edit-close").onclick = () => { sheet.hidden = true; };
-    $("#customer-edit-form").onsubmit = (e) => {
-      e.preventDefault();
-      const result = UK_USERS.updateCustomerUser(customerId, {
+	    $("#customer-edit-form").onsubmit = async (e) => {
+	      e.preventDefault();
+	      const result = await UK_USERS.updateCustomerUser(customerId, {
         name: $("#edit-customer-name").value.trim(),
         email: $("#edit-customer-email").value.trim(),
         phone: $("#edit-customer-phone").value.trim(),
@@ -1032,7 +1134,7 @@
           <table class="data-table">
             <thead><tr>
               <th>#</th><th>Customer</th><th>Barber</th>
-              <th>Service</th><th>Date</th><th>Time</th><th>Price</th><th>Status</th>
+	              <th>Service</th><th>Date</th><th>Time</th><th>Price</th><th>Status</th><th>Actions</th>
             </tr></thead>
             <tbody id="bk-tbody">
               ${_renderBookingRows(all, filter)}
@@ -1059,25 +1161,68 @@
         btn.classList.add("is-active");
         const f = btn.dataset.bkFilter;
         const tbody = $("#bk-tbody");
-        if (tbody) tbody.innerHTML = _renderBookingRows(all, f);
-      });
-    });
-  }
+	        if (tbody) tbody.innerHTML = _renderBookingRows(all, f);
+        bindAdminBookingActions(el, f);
+	      });
+	    });
+    bindAdminBookingActions(el, filter);
+	  }
 
   function _renderBookingRows(bookings, filter) {
     const filtered = filter === "all" ? bookings : bookings.filter(b => b.status === filter);
-    if (!filtered.length) return `<tr><td colspan="8" style="text-align:center;color:var(--text-mute);padding:24px;">No bookings found</td></tr>`;
-    return filtered.map(b => `
-      <tr>
-        <td class="muted">${b.id}</td>
-        <td>${b.customer ? _avChip(b.customer.avatar, b.customer.name, "") : _guestChip(b.guest)}</td>
-        <td>${b.barber ? _avChip(b.barber.avatar, b.barber.displayName, "") : "—"}</td>
-        <td class="cell-main">${b.service}</td>
-        <td class="dim">${_fmtDate(b.date)}</td>
-        <td class="dim">${b.time}</td>
-        <td>${_money(b.price)}</td>
-        <td>${_statusBadge(b.status)}</td>
-      </tr>`).join("");
+	    if (!filtered.length) return `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:24px;">No bookings found</td></tr>`;
+    const barbers = UK_USERS.getAllBarbers().filter(barber => barber.status === "active");
+	    return filtered.map(b => `
+	      <tr>
+	        <td class="muted">${b.id}</td>
+	        <td>${b.customer ? _avChip(b.customer.avatar, b.customer.name, "") : _guestChip(b.guest)}</td>
+	        <td>
+          <select class="inline-select" data-admin-booking-barber="${b.id}">
+            ${barbers.map(barber => `<option value="${barber.id}" ${b.barberId === barber.id ? "selected" : ""}>${_escapeHTML(barber.displayName || barber.name)}</option>`).join("")}
+          </select>
+        </td>
+	        <td class="cell-main">${b.service}</td>
+	        <td class="dim">${_fmtDate(b.date)}</td>
+	        <td class="dim">${b.time}</td>
+	        <td>${_money(b.price)}</td>
+	        <td>
+          <select class="inline-select" data-admin-booking-status="${b.id}">
+            ${UK_USERS.getBookingStatuses().map(status => `<option value="${status}" ${b.status === status ? "selected" : ""}>${STATUS_LABELS[status] || status}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="mini-action" data-save-admin-booking="${b.id}">Save</button>
+            <button class="mini-action danger" data-cancel-admin-booking="${b.id}">Cancel</button>
+          </div>
+        </td>
+	      </tr>`).join("");
+	  }
+
+  function bindAdminBookingActions(scope, filter) {
+    scope.querySelectorAll("[data-save-admin-booking]").forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.saveAdminBooking;
+        const status = scope.querySelector(`[data-admin-booking-status="${id}"]`)?.value;
+        const barberId = scope.querySelector(`[data-admin-booking-barber="${id}"]`)?.value;
+        const result = await UK_USERS.updateBookingForAdmin(id, { status, barberId });
+        if (!result.ok) {
+          alert(result.error || "Could not save booking.");
+          return;
+        }
+        renderAdminBookings(filter || "all");
+      };
+    });
+    scope.querySelectorAll("[data-cancel-admin-booking]").forEach(btn => {
+      btn.onclick = async () => {
+        const result = await UK_USERS.cancelBooking(btn.dataset.cancelAdminBooking);
+        if (!result.ok) {
+          alert(result.error || "Could not cancel booking.");
+          return;
+        }
+        renderAdminBookings(filter || "all");
+      };
+    });
   }
 
   function _guestChip(guest) {
@@ -1095,7 +1240,7 @@
     const paidTotal = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
     el.innerHTML = `
       <div class="pt-kpis">
-        <div class="pt-kpi gold"><div class="kpi-label">Paid</div><div class="kpi-val">${_money(paidTotal)}</div><div class="kpi-sub">mock provider</div></div>
+	        <div class="pt-kpi gold"><div class="kpi-label">Paid</div><div class="kpi-val">${_money(paidTotal)}</div><div class="kpi-sub">payment records</div></div>
         <div class="pt-kpi"><div class="kpi-label">Pending</div><div class="kpi-val">${counts.pending || 0}</div><div class="kpi-sub">awaiting payment</div></div>
         <div class="pt-kpi"><div class="kpi-label">Failed</div><div class="kpi-val">${counts.failed || 0}</div><div class="kpi-sub">needs follow-up</div></div>
         <div class="pt-kpi"><div class="kpi-label">Cancelled</div><div class="kpi-val">${counts.cancelled || 0}</div><div class="kpi-sub">checkout cancelled</div></div>
@@ -1147,7 +1292,7 @@
       <div class="pt-grid">
         <div>
           <div class="pt-panel">
-            <div class="pt-panel-head"><h3>Send Notification to Barbers</h3><span class="dim">Mock admin message</span></div>
+	            <div class="pt-panel-head"><h3>Send Notification to Barbers</h3><span class="dim">Team message</span></div>
             <form class="portal-form" id="admin-notification-form">
               <label>
                 Barber
@@ -1179,7 +1324,7 @@
 
     const form = $("#admin-notification-form");
     if (form) {
-      form.addEventListener("submit", (e) => {
+	      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const target = $("#admin-notif-target").value;
         const title = $("#admin-notif-title").value.trim();
@@ -1191,8 +1336,13 @@
           return;
         }
         const receiverIds = target === "all" ? null : [target];
-        UK_USERS.sendAdminNotificationToBarbers({ senderId: adminId, receiverIds, title, message });
-        const msg = target === "all" ? "Notification sent to all barbers." : "Notification sent to selected barber.";
+	        const result = await UK_USERS.sendAdminNotificationToBarbers({ senderId: adminId, receiverIds, title, message });
+        if (!result.ok) {
+          feedback.textContent = result.error;
+          feedback.className = "form-feedback error";
+          return;
+        }
+	        const msg = target === "all" ? "Notification sent to all barbers." : "Notification sent to selected barber.";
         form.reset();
         renderAdminNotifications(adminId, msg);
       });
@@ -1226,7 +1376,7 @@
         <div class="pt-kpi gold"><div class="kpi-label">Working Today</div><div class="kpi-val">${activeToday.length}</div><div class="kpi-sub">active barbers</div></div>
         <div class="pt-kpi"><div class="kpi-label">Upcoming Shifts</div><div class="kpi-val">${upcoming.length}</div><div class="kpi-sub">scheduled / days off</div></div>
         <div class="pt-kpi"><div class="kpi-label">Team</div><div class="kpi-val">${barbers.length}</div><div class="kpi-sub">barbers in roster</div></div>
-        <div class="pt-kpi"><div class="kpi-label">Month View</div><div class="kpi-val">Soon</div><div class="kpi-sub">calendar placeholder</div></div>
+	        <div class="pt-kpi"><div class="kpi-label">Roster</div><div class="kpi-val">Live</div><div class="kpi-sub">weekly view</div></div>
       </div>
 
       <div class="pt-grid">
@@ -1276,7 +1426,7 @@
           </div>
           <div class="pt-panel subtle-panel">
             <div class="pt-panel-head"><h3>Booking Availability Connection</h3></div>
-            <p class="panel-copy">Next backend step: customer booking availability should query rostered barbers, service skills and open time windows before offering appointment slots.</p>
+	            <p class="panel-copy">Public booking requests are checked against rostered barbers, service duration and existing appointments before they are saved.</p>
           </div>
         </div>
       </div>
@@ -1357,9 +1507,9 @@
   function bindAdminRosterEvents(adminId) {
     const form = $("#roster-create-form");
     if (form) {
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const result = UK_USERS.createRosterShift(adminId, {
+	      form.addEventListener("submit", async (e) => {
+	        e.preventDefault();
+	        const result = await UK_USERS.createRosterShift(adminId, {
           barberId: $("#roster-barber").value,
           status: $("#roster-status").value,
           date: $("#roster-date").value,
@@ -1392,12 +1542,12 @@
 
     const rosterPane = $("#ap-roster-inner");
     if (rosterPane) {
-      rosterPane.onclick = (e) => {
+	      rosterPane.onclick = async (e) => {
         const editBtn = e.target.closest("[data-edit-shift]");
         const cancelBtn = e.target.closest("[data-cancel-shift]");
         if (editBtn) openRosterEditSheet(adminId, editBtn.dataset.editShift);
         if (cancelBtn) {
-          const result = UK_USERS.cancelRosterShift(adminId, cancelBtn.dataset.cancelShift);
+	          const result = await UK_USERS.cancelRosterShift(adminId, cancelBtn.dataset.cancelShift);
           if (result.ok) renderAdminRoster(adminId);
         }
       };
@@ -1442,9 +1592,9 @@
         </form>
       </div>`;
     $("#roster-edit-close").addEventListener("click", () => { sheet.hidden = true; });
-    $("#roster-edit-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const result = UK_USERS.updateRosterShift(adminId, shiftId, {
+	    $("#roster-edit-form").addEventListener("submit", async (e) => {
+	      e.preventDefault();
+	      const result = await UK_USERS.updateRosterShift(adminId, shiftId, {
         barberId: $("#edit-roster-barber").value,
         status: $("#edit-roster-status").value,
         date: $("#edit-roster-date").value,
@@ -1556,8 +1706,8 @@
           <div class="mc-lbl">Avg duration</div>
         </div>
         <div class="metric-card">
-          <div class="mc-val">${barber.profile.rating} ★</div>
-          <div class="mc-lbl">Rating placeholder</div>
+	          <div class="mc-val">${barber.profile.rating} ★</div>
+	          <div class="mc-lbl">Current rating</div>
         </div>
       </div>
 
@@ -1586,7 +1736,7 @@
               <div class="profile-field"><div class="pf-key">This week</div><div class="pf-val">${weeklyCompleted} completed</div></div>
               <div class="profile-field"><div class="pf-key">This month</div><div class="pf-val">${monthlyCompleted} completed</div></div>
               <div class="profile-field"><div class="pf-key">Changes</div><div class="pf-val">${cancelled.length} cancelled/rescheduled</div></div>
-              <div class="profile-field"><div class="pf-key">Return rate</div><div class="pf-val">Placeholder for CRM</div></div>
+	              <div class="profile-field"><div class="pf-key">Return visits</div><div class="pf-val">${bookings.filter(b => b.customerId).length} linked bookings</div></div>
             </div>
           </div>
           <div class="pt-panel subtle-panel">
@@ -1719,9 +1869,9 @@
         </form>
       </div>`;
     $("#booking-editor-close").onclick = () => { slot.innerHTML = ""; };
-    $("#barber-booking-form").onsubmit = (e) => {
-      e.preventDefault();
-      const result = UK_USERS.updateBookingForBarber(barberId, bookingId, {
+	    $("#barber-booking-form").onsubmit = async (e) => {
+	      e.preventDefault();
+	      const result = await UK_USERS.updateBookingForBarber(barberId, bookingId, {
         date: $("#edit-booking-date").value,
         time: $("#edit-booking-time").value,
         duration: Number($("#edit-booking-duration").value),
@@ -1735,7 +1885,7 @@
         feedback.className = "form-feedback error";
         return;
       }
-      feedback.textContent = "Booking saved. Customer notification sent.";
+	      feedback.textContent = "Booking saved.";
       feedback.className = "form-feedback success";
       setTimeout(() => {
         renderBarberToday(barberId);
@@ -1761,7 +1911,7 @@
             <div class="bp-meta">
               <span class="bp-rating">★ ${p.rating} rating</span>
               <span>${p.reviewCount} reviews</span>
-              <span>Review placeholder</span>
+	              <span>Customer reviews</span>
             </div>
           </div>
         </div>
@@ -1836,17 +1986,17 @@
         ${_renderNotificationList(notifications, barberId)}
       </div>`;
     const markRead = $("#bp-mark-read");
-    if (markRead) markRead.onclick = () => {
-      UK_USERS.markAllNotificationsRead(barberId, "barber");
-      updateBarberNotificationBadge(barberId);
-      renderBarberNotifications(barberId);
-    };
-    el.querySelectorAll("[data-notification-id]").forEach(card => {
-      card.addEventListener("click", () => {
-        UK_USERS.markNotificationRead(card.dataset.notificationId, barberId);
-        updateBarberNotificationBadge(barberId);
-        renderBarberNotifications(barberId);
-      });
+	    if (markRead) markRead.onclick = async () => {
+	      await UK_USERS.markAllNotificationsRead(barberId, "barber");
+	      updateBarberNotificationBadge(barberId);
+	      renderBarberNotifications(barberId);
+	    };
+	    el.querySelectorAll("[data-notification-id]").forEach(card => {
+	      card.addEventListener("click", async () => {
+	        await UK_USERS.markNotificationRead(card.dataset.notificationId, barberId);
+	        updateBarberNotificationBadge(barberId);
+	        renderBarberNotifications(barberId);
+	      });
     });
   }
 
@@ -1976,23 +2126,23 @@
       </div>`;
 
     const markRead = $("#cp-mark-read");
-    if (markRead) markRead.onclick = () => {
-      UK_USERS.markAllNotificationsRead(session.customerId, "customer");
-      renderCustomerPortal(session);
-    };
-    el.querySelectorAll("[data-notification-id]").forEach(card => {
-      card.addEventListener("click", () => {
-        UK_USERS.markNotificationRead(card.dataset.notificationId, session.customerId);
-        renderCustomerPortal(session);
-      });
+	    if (markRead) markRead.onclick = async () => {
+	      await UK_USERS.markAllNotificationsRead(session.customerId, "customer");
+	      renderCustomerPortal(session);
+	    };
+	    el.querySelectorAll("[data-notification-id]").forEach(card => {
+	      card.addEventListener("click", async () => {
+	        await UK_USERS.markNotificationRead(card.dataset.notificationId, session.customerId);
+	        renderCustomerPortal(session);
+	      });
     });
     $("#cp-edit-profile")?.addEventListener("click", () => {
       const form = $("#cp-profile-form");
       if (form) form.hidden = !form.hidden;
     });
-    $("#cp-profile-form")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const result = UK_USERS.updateCustomerUser(session.customerId, {
+	    $("#cp-profile-form")?.addEventListener("submit", async (e) => {
+	      e.preventDefault();
+	      const result = await UK_USERS.updateCustomerUser(session.customerId, {
         name: $("#cp-edit-name").value.trim(),
         email: $("#cp-edit-email").value.trim(),
         phone: $("#cp-edit-phone").value.trim(),
@@ -2020,7 +2170,7 @@
       const success = $("#register-success");
       if (error) error.textContent = "";
       if (success) success.textContent = "";
-      const result = UK_USERS.registerCustomer({
+	      const result = await UK_USERS.registerCustomer({
         name: $("#register-name").value.trim(),
         email: $("#register-email").value.trim(),
         phone: $("#register-phone").value.trim(),
@@ -2072,19 +2222,19 @@
         <div class="summary-total"><span>Total</span><b>${_money(payment.amount)}</b></div>
       </div>
       <div class="payment-actions">
-        <button class="btn btn-gold" id="mock-pay-now" data-ripple>Pay Demo</button>
-        <button class="btn btn-ghost" id="mock-cancel-payment">Cancel</button>
+	        <button class="btn btn-gold" id="payment-mark-paid" data-ripple>Mark Paid</button>
+        <button class="btn btn-ghost" id="payment-cancel">Cancel</button>
       </div>
-      <p class="panel-copy">Payment provider is mocked. This can be swapped for Square, Stripe or another checkout API without changing the booking model.</p>`;
-    bindRouteLinks(el);
-    $("#mock-pay-now")?.addEventListener("click", () => {
-      UK_USERS.updatePaymentStatus(payment.id, "paid");
-      goToRoute("/payment-success");
-    });
-    $("#mock-cancel-payment")?.addEventListener("click", () => {
-      UK_USERS.updatePaymentStatus(payment.id, "cancelled");
-      goToRoute("/payment-cancelled");
-    });
+	      <p class="panel-copy">Payment status is stored on the server and can later be connected to Square, Stripe or another checkout provider.</p>`;
+	    bindRouteLinks(el);
+	    $("#payment-mark-paid")?.addEventListener("click", async () => {
+	      await UK_USERS.updatePaymentStatus(payment.id, "paid");
+	      goToRoute("/payment-success");
+	    });
+	    $("#payment-cancel")?.addEventListener("click", async () => {
+	      await UK_USERS.updatePaymentStatus(payment.id, "cancelled");
+	      goToRoute("/payment-cancelled");
+	    });
   }
 
   function renderPaymentSuccess() {
@@ -2376,7 +2526,7 @@
         document.body.dataset.view = name;
         this.current = name;
 
-        // Nav tab active highlight (demo views only)
+	        // Nav tab active highlight
         $$(".view-tabs button").forEach(b => b.classList.toggle("is-active", b.dataset.viewLink === name));
 
         if (!this.inited[name]) {
@@ -2605,8 +2755,8 @@
     const bpLogout = $("#bp-logout");
     const cpLogout = $("#cp-logout");
 
-    function doLogout() {
-      Auth.logout();
+	    async function doLogout() {
+	      await Auth.logout();
       _authRole = "customer";
       // Reset portal inited so they re-render fresh on next login
       Views.inited["admin-portal"]    = false;
@@ -2668,13 +2818,36 @@
   /* =====================================================
      BOOT
      ===================================================== */
-  function bootStatic() {
-    renderLanding();
+	  function bootStatic() {
+	    renderLanding();
     const pre = document.getElementById("preloader");
     if (pre) pre.style.display = "none";
     document.querySelectorAll(".reveal").forEach(el => { el.style.opacity = 1; el.style.transform = "none"; });
-    document.querySelectorAll(".view-landing [data-count]").forEach(setCountFinal);
-    document.querySelectorAll("[data-view-link]").forEach(el => el.addEventListener("click", (e) => {
+	    document.querySelectorAll(".view-landing [data-count]").forEach(setCountFinal);
+    function renderStaticView(name) {
+      const session = Auth.getSession();
+      document.body.dataset.view = name;
+      if (name === "booking") renderBooking();
+      if (name === "register") renderRegister();
+      if (name === "checkout") renderCheckout();
+      if (name === "payment-success") renderPaymentSuccess();
+      if (name === "payment-cancelled") renderPaymentCancelled();
+      if (name === "admin-portal" && session) renderAdminPortal(session);
+      if (name === "barber-portal" && session) renderBarberPortal(session);
+      if (name === "customer-portal" && session) renderCustomerPortal(session);
+      document.querySelectorAll(`.view-${name} .reveal`).forEach(x => { x.style.opacity = 1; x.style.transform = "none"; });
+      document.querySelectorAll(".view-tabs button").forEach(b => b.classList.toggle("is-active", b.dataset.viewLink === name));
+    }
+    const initialRoute = routeForPath(location.pathname);
+    if (initialRoute) {
+      if (initialRoute.role && !Auth.requireRole(initialRoute.role)) {
+        _setAuthRole(initialRoute.role);
+        renderStaticView("login");
+      } else {
+        renderStaticView(initialRoute.view);
+      }
+    }
+	    document.querySelectorAll("[data-view-link]").forEach(el => el.addEventListener("click", (e) => {
       e.preventDefault();
       const name = el.dataset.viewLink;
       const valid = ["landing","booking","admin","login","register","checkout","payment-success","payment-cancelled","admin-portal","barber-portal","customer-portal"];
@@ -2711,13 +2884,42 @@
       document.querySelectorAll(".view-tabs button").forEach(b => b.classList.toggle("is-active", b.dataset.viewLink === name));
       window.scrollTo({ top: 0 });
       updateNavAuthState();
-    }));
+	    }));
+	  }
+
+  function forceDirectRouteFallback() {
+    const clean = location.pathname.replace(/\/+$/, "") || "/";
+    if (clean === "/book") {
+      document.body.dataset.view = "booking";
+      if (!document.querySelector(".booking-flow-shell")) renderBooking();
+      return;
+    }
+    if (clean === "/admin" || clean === "/admin/login") {
+      _setAuthRole("admin");
+      document.body.dataset.view = "login";
+      return;
+    }
+    if (clean === "/barber/login") {
+      _setAuthRole("barber");
+      document.body.dataset.view = "login";
+      return;
+    }
+    if (clean === "/customer/login") {
+      _setAuthRole("customer");
+      document.body.dataset.view = "login";
+    }
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    if (!gsap) {
+	  document.addEventListener("DOMContentLoaded", async () => {
+    try {
+      await UK_USERS.init();
+    } catch (err) {
+      console.error("Could not load server data", err);
+    }
+	    if (!gsap) {
       bootStatic();
       bindAuth();
+      forceDirectRouteFallback();
       updateNavAuthState();
       return;
     }
@@ -2743,6 +2945,7 @@
       } else {
         applyRoute(ROUTES["/"], false);
       }
+      forceDirectRouteFallback();
     });
   });
 

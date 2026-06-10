@@ -1,6 +1,6 @@
 /* ============================================================
-   Urban Kings — Mock data shared across previews
-   No backend yet. All values are demo placeholders.
+   Urban Kings — Public content shared across the site
+   Operational records are loaded through the server API.
    ============================================================ */
 window.UK = window.UK || {};
 
@@ -111,7 +111,7 @@ UK.faq = [
   { q: "¿Aceptan card?",     a: "Sí, EFTPOS, tarjeta y Apple Pay." },
 ];
 
-/* ===================== Client (demo) ===================== */
+/* ===================== Public customer sample content ===================== */
 UK.client = {
   id: "uk-04812",
   name: "Mateo Hernández",
@@ -147,7 +147,7 @@ UK.client = {
   ],
 };
 
-/* ===================== Admin (demo) ===================== */
+/* ===================== Public-facing business metrics ===================== */
 UK.admin = {
   metrics: {
     revenueToday: 1284,

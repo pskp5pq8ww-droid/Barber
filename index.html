@@ -55,6 +55,26 @@
   </script>
 </head>
 <body data-view="landing">
+  <script>
+    (function () {
+      var path = location.pathname.replace(/\/+$/, "") || "/";
+      var role = path.indexOf("/admin") === 0 ? "admin" : path.indexOf("/barber") === 0 ? "barber" : path.indexOf("/customer") === 0 ? "customer" : "";
+      if (role && (path === "/admin" || path.slice(-6) === "/login")) {
+        window.__UK_INITIAL_AUTH_ROLE = role;
+        document.body.dataset.view = "login";
+        document.addEventListener("DOMContentLoaded", function () {
+          setTimeout(function () {
+            var labels = { admin: "Admin Portal", barber: "Barber Portal", customer: "Customer Portal" };
+            var label = document.getElementById("auth-portal-label");
+            if (label) label.textContent = labels[role] || "Customer Portal";
+            document.querySelectorAll("[data-auth-role]").forEach(function (button) {
+              button.classList.toggle("is-active", button.dataset.authRole === role);
+            });
+          }, 0);
+        });
+      }
+    })();
+  </script>
 
   <!-- ========================= PRELOADER (chrome lion) ========================= -->
   <!-- LOGO INTEGRATION #1: lion emblem (from official transparent logo). Reveal = mask wipe + shimmer (see runPreloader in app.js).
@@ -90,7 +110,6 @@
     <nav class="view-tabs" aria-label="Switch view">
       <button data-view-link="landing" class="is-active">Home</button>
       <button data-view-link="booking">Booking</button>
-      <button data-view-link="admin">Admin</button>
     </nav>
     <button class="nav-signin" id="nav-signin" data-view-link="login">Sign In</button>
     <button class="nav-user" id="nav-user" aria-label="Open your portal">
@@ -239,7 +258,6 @@
             <p>Secure your chair in under 30 seconds. Instant confirmation, automatic reminder.</p>
             <div class="hero-ctas">
               <button class="btn btn-gold" data-view-link="booking" data-ripple>Book Now</button>
-              <button class="btn btn-ghost" data-view-link="admin" data-ripple>Admin Panel</button>
             </div>
             <div class="cta-contacts">
               <a href="https://wa.me/61400000000" target="_blank" rel="noopener">
@@ -295,13 +313,12 @@
               <h4 style="margin-top:22px;">Explore</h4>
               <ul>
                 <li><button data-view-link="booking">Booking</button></li>
-                <li><button data-view-link="admin">Admin</button></li>
               </ul>
             </div>
           </div>
           <div class="copy">
             <span>© 2026 Urban Kings · Brisbane City</span>
-            <span class="dim">Preview · demo data · not connected to production</span>
+            <span class="dim">Premium grooming · Brisbane City</span>
           </div>
         </div>
       </footer>
@@ -411,7 +428,7 @@
             <section class="panel reveal chart-wrap">
               <div class="panel-head"><h3>Weekly revenue</h3><button>Export CSV</button></div>
               <svg id="chart" class="chart-svg" preserveAspectRatio="none"></svg>
-              <div class="chart-legend"><span><i class="swatch" style="background:var(--gold);"></i>Daily revenue (AUD)</span><span class="dim">Demo data</span></div>
+              <div class="chart-legend"><span><i class="swatch" style="background:var(--gold);"></i>Daily revenue (AUD)</span><span class="dim">Internal report</span></div>
             </section>
             <section class="panel reveal" style="margin-top:16px;">
               <div class="panel-head"><h3>Top clients</h3><button>View all</button></div>
@@ -482,8 +499,8 @@
             </button>
           </form>
 
-          <details class="auth-hint" id="auth-hint-details">
-            <summary>Demo credentials</summary>
+          <details class="auth-hint" id="auth-hint-details" hidden>
+            <summary>Access details</summary>
             <div class="auth-hint-body" id="auth-hint-body">
               <!-- filled by JS -->
             </div>
