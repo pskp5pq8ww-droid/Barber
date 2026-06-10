@@ -6,10 +6,10 @@ const crypto = require("crypto");
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8123;
-const STORAGE_ROOT = process.env.UK_STORAGE_DIR || "/storage/cd";
-const DATA_DIR = path.join(STORAGE_ROOT, "data");
-const BACKUP_DIR = path.join(STORAGE_ROOT, "backups");
-const UPLOAD_DIR = path.join(STORAGE_ROOT, "uploads");
+let STORAGE_ROOT = process.env.UK_STORAGE_DIR || "/storage/cd";
+let DATA_DIR = path.join(STORAGE_ROOT, "data");
+let BACKUP_DIR = path.join(STORAGE_ROOT, "backups");
+let UPLOAD_DIR = path.join(STORAGE_ROOT, "uploads");
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -43,6 +43,13 @@ const DATA_FILES = {
 };
 
 let writeQueue = Promise.resolve();
+
+function setStorageRoot(storageRoot) {
+  STORAGE_ROOT = storageRoot;
+  DATA_DIR = path.join(STORAGE_ROOT, "data");
+  BACKUP_DIR = path.join(STORAGE_ROOT, "backups");
+  UPLOAD_DIR = path.join(STORAGE_ROOT, "uploads");
+}
 
 function now() {
   return new Date().toISOString();
@@ -229,6 +236,18 @@ function seedData() {
 }
 
 async function ensureStorage() {
+  try {
+    await ensureStorageAtCurrentRoot();
+  } catch (err) {
+    const fallbackRoot = path.join(ROOT, "storage", "cd");
+    if (STORAGE_ROOT === fallbackRoot) throw err;
+    console.warn(`Storage root ${STORAGE_ROOT} is not writable (${err.code || err.message}). Falling back to ${fallbackRoot}.`);
+    setStorageRoot(fallbackRoot);
+    await ensureStorageAtCurrentRoot();
+  }
+}
+
+async function ensureStorageAtCurrentRoot() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(BACKUP_DIR, { recursive: true });
   await fsp.mkdir(path.join(UPLOAD_DIR, "profile-images"), { recursive: true });
