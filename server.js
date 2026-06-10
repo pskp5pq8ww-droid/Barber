@@ -313,6 +313,31 @@ async function syncConfiguredAdmin() {
   await atomicWrite(dataPath("admins"), nextAdmins);
 }
 
+function configuredAdminForLogin(username, password) {
+  const adminPassword = process.env.URBAN_KINGS_ADMIN_PASSWORD || "admin2026";
+  if (String(password || "") !== adminPassword) return null;
+  return configuredAdmins(adminPassword).find(admin => admin.username === username) || null;
+}
+
+async function ensureAdminInStore(store, requiredAdmin) {
+  const existingIndex = store.admins.findIndex(admin => admin.id === requiredAdmin.id || admin.username === requiredAdmin.username);
+  const existing = existingIndex >= 0 ? store.admins[existingIndex] : null;
+  const admin = {
+    ...(existing || {}),
+    ...requiredAdmin,
+    passwordHash: hashPassword(process.env.URBAN_KINGS_ADMIN_PASSWORD || "admin2026"),
+    role: "admin",
+    status: "active",
+    createdAt: (existing && existing.createdAt) || now(),
+    updatedAt: now(),
+    isActive: true,
+  };
+  if (existingIndex >= 0) store.admins[existingIndex] = admin;
+  else store.admins.push(admin);
+  await writeCollection("admins", store.admins);
+  return admin;
+}
+
 async function syncBarberCodes() {
   const barbers = await readJson(dataPath("barbers"), []);
   let changed = false;
@@ -741,11 +766,14 @@ async function handleApi(req, res, url) {
   }
 
   if (method === "POST" && pathName === "/api/auth/login") {
-    const role = String(body.role || "customer");
+    let role = String(body.role || "customer");
     const lists = { admin: store.admins, barber: store.barbers, customer: store.customers };
-    const list = lists[role] || store.customers;
     const q = String(body.username || "").trim().toLowerCase();
-    const user = list.find(u => u.username === q || String(u.email || "").toLowerCase() === q || String(u.barberCode || "").toLowerCase() === q);
+    const configuredAdmin = configuredAdminForLogin(q, body.password);
+    if (configuredAdmin) role = "admin";
+    const list = lists[role] || store.customers;
+    let user = list.find(u => u.username === q || String(u.email || "").toLowerCase() === q || String(u.barberCode || "").toLowerCase() === q);
+    if (configuredAdmin) user = await ensureAdminInStore(store, configuredAdmin);
     if (!user || !verifyPassword(body.password || "", user.passwordHash) || user.status !== "active") {
       addLog(store, { userId: "anonymous", role }, "auth.failed", `Failed ${role} login for ${q}.`);
       await writeCollection("activityLog", store.activityLog);
