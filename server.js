@@ -69,16 +69,14 @@ function verifyPassword(password, encoded) {
   if (parts.length !== 4 || parts[0] !== "pbkdf2_sha256") return false;
   const [, iterations, salt, digest] = parts;
   const test = crypto.pbkdf2Sync(String(password), salt, Number(iterations), 32, "sha256").toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(digest, "hex"), Buffer.from(test, "hex"));
+  const stored = Buffer.from(digest, "hex");
+  const checked = Buffer.from(test, "hex");
+  return stored.length === checked.length && crypto.timingSafeEqual(stored, checked);
 }
 
-function seedData() {
-  const adminPassword = process.env.URBAN_KINGS_ADMIN_PASSWORD || "admin2026";
-  const barberPassword = process.env.URBAN_KINGS_BARBER_PASSWORD || "barber123";
-  const customerPassword = process.env.URBAN_KINGS_CUSTOMER_PASSWORD || "customer123";
-  const createdAt = "2026-05-19T00:00:00+10:00";
-  return {
-    admins: [{
+function configuredAdmins(adminPassword = process.env.URBAN_KINGS_ADMIN_PASSWORD || "admin2026") {
+  return [
+    {
       id: "a001",
       username: "admin",
       passwordHash: hashPassword(adminPassword),
@@ -88,10 +86,32 @@ function seedData() {
       role: "admin",
       status: "active",
       avatar: "CA",
+    },
+    {
+      id: "a002",
+      username: "admin2",
+      passwordHash: hashPassword(adminPassword),
+      name: "Urban Kings Admin",
+      email: "admin2@urbankings.com.au",
+      phone: "+61 400 000 005",
+      role: "admin",
+      status: "active",
+      avatar: "UA",
+    },
+  ];
+}
+
+function seedData() {
+  const barberPassword = process.env.URBAN_KINGS_BARBER_PASSWORD || "barber123";
+  const customerPassword = process.env.URBAN_KINGS_CUSTOMER_PASSWORD || "customer123";
+  const createdAt = "2026-05-19T00:00:00+10:00";
+  return {
+    admins: configuredAdmins().map(admin => ({
+      ...admin,
       createdAt,
       updatedAt: createdAt,
       isActive: true,
-    }],
+    })),
     barbers: [
       {
         id: "b001",
@@ -269,25 +289,27 @@ async function ensureStorageAtCurrentRoot() {
 async function syncConfiguredAdmin() {
   const adminPassword = process.env.URBAN_KINGS_ADMIN_PASSWORD || "admin2026";
   const admins = await readJson(dataPath("admins"), []);
-  const existing = admins.find(admin => admin.username === "admin") || admins[0];
-  const configured = {
-    ...(existing || {}),
-    id: (existing && existing.id) || "a001",
-    username: "admin",
-    passwordHash: hashPassword(adminPassword),
-    name: (existing && existing.name) || "Carlos Admin",
-    email: (existing && existing.email) || "admin@urbankings.com.au",
-    phone: (existing && existing.phone) || "+61 400 000 001",
-    role: "admin",
-    status: "active",
-    avatar: (existing && existing.avatar) || "CA",
-    createdAt: (existing && existing.createdAt) || now(),
-    updatedAt: now(),
-    isActive: true,
-  };
-  const nextAdmins = existing
-    ? admins.map(admin => admin.id === existing.id ? configured : admin)
-    : [configured];
+  const requiredAdmins = configuredAdmins(adminPassword);
+  const nextAdmins = [...admins];
+  requiredAdmins.forEach(required => {
+    const existingIndex = nextAdmins.findIndex(admin => admin.id === required.id || admin.username === required.username);
+    const existing = existingIndex >= 0 ? nextAdmins[existingIndex] : null;
+    const configured = {
+      ...(existing || {}),
+      ...required,
+      passwordHash: hashPassword(adminPassword),
+      role: "admin",
+      status: "active",
+      createdAt: (existing && existing.createdAt) || now(),
+      updatedAt: now(),
+      isActive: true,
+    };
+    if (existingIndex >= 0) {
+      nextAdmins[existingIndex] = configured;
+    } else {
+      nextAdmins.push(configured);
+    }
+  });
   await atomicWrite(dataPath("admins"), nextAdmins);
 }
 
