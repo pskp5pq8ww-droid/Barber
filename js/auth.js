@@ -31,11 +31,14 @@ window.Auth = (function () {
   }
 
   async function login(username, password, role) {
+    const cleanUsername = String(username || "").trim();
+    const lowerUsername = cleanUsername.toLowerCase();
+    const loginRole = ["admin", "admin2"].includes(lowerUsername) ? "admin" : role;
     const response = await fetch("/api/auth/login", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, role }),
+      body: JSON.stringify({ username: cleanUsername, password, role: loginRole }),
     });
     const result = await response.json().catch(() => ({ ok: false, error: "Login failed." }));
     if (!response.ok || !result.ok) return { ok: false, error: result.error || "Login failed." };

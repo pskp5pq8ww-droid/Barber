@@ -2783,6 +2783,8 @@
         e.preventDefault();
         const username = ($("#auth-username") || {}).value || "";
         const password = ($("#auth-password") || {}).value || "";
+        const loginRole = ["admin", "admin2"].includes(username.trim().toLowerCase()) ? "admin" : _authRole;
+        if (loginRole !== _authRole) _setAuthRole(loginRole);
         if (!username || !password) {
           if (errEl) errEl.textContent = "Please enter username and password.";
           if (successEl) successEl.textContent = "";
@@ -2793,7 +2795,7 @@
         if (submit) submit.classList.add("is-loading");
         if (label)  label.textContent = "Signing in…";
 
-        const result = await Auth.login(username, password, _authRole);
+        const result = await Auth.login(username, password, loginRole);
 
         if (submit) submit.classList.remove("is-loading");
         if (label)  label.textContent = "Sign In";
