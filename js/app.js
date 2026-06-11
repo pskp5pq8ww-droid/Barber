@@ -38,6 +38,7 @@
     "/admin/barbers": { view: "admin-portal", role: "admin", tab: "ap-barbers" },
     "/admin/bookings": { view: "admin-portal", role: "admin", tab: "ap-bookings" },
     "/admin/payments": { view: "admin-portal", role: "admin", tab: "ap-payments" },
+    "/admin/wallet": { view: "admin-portal", role: "admin", tab: "ap-wallet" },
     "/admin/roster": { view: "admin-portal", role: "admin", tab: "ap-roster" },
     "/barber/login": { view: "login", role: "barber" },
     "/barber/dashboard": { view: "barber-portal", role: "barber", tab: "bp-today" },
@@ -75,6 +76,7 @@
     "ap-barbers": "/admin/barbers",
     "ap-bookings": "/admin/bookings",
     "ap-payments": "/admin/payments",
+    "ap-wallet": "/admin/wallet",
     "ap-roster": "/admin/roster",
     "bp-today": "/barber/dashboard",
     "bp-bookings": "/barber/bookings",
@@ -292,6 +294,20 @@
             <div class="summary-line"><span>Barber</span><b>${booking.barber ? _escapeHTML(booking.barber.displayName || booking.barber.name) : _escapeHTML(booking.barberName || "Any available")}</b></div>
             <div class="summary-line"><span>Status</span><b>${_statusBadge(booking.status)}</b></div>
           </div>
+          <div class="wallet-membership-card">
+            <div>
+              <span class="eyebrow mini">Apple Wallet Membership</span>
+              <h3>Keep your Urban Kings card in Apple Wallet.</h3>
+              <p>Add your Urban Kings membership card to Apple Wallet and receive booking updates, visit tracking and rewards.</p>
+              <div class="wallet-meta">
+                <span>${_escapeHTML(booking.wallet?.membershipStatus || "Active")}</span>
+                <span>${_escapeHTML(booking.wallet?.bookingStatus || "Pending Confirmation")}</span>
+                <span>${Number(booking.wallet?.visits || 0)} / ${Number(booking.wallet?.visitsGoal || 5)} visits</span>
+              </div>
+            </div>
+            <button class="btn btn-gold" data-wallet-booking="${_escapeHTML(booking.id)}">Add To Apple Wallet</button>
+            <div class="form-feedback" id="wallet-feedback" aria-live="polite"></div>
+          </div>
           <div class="payment-actions">
             <button class="btn btn-gold" data-route-link="/">Back to Home</button>
             <a class="btn btn-ghost" href="https://wa.me/61400000000" target="_blank" rel="noopener">Contact WhatsApp</a>
@@ -302,6 +318,32 @@
 
   function bindBookingConfirmationEvents(host) {
     bindRouteLinks(host);
+    host.querySelector("[data-wallet-booking]")?.addEventListener("click", async (event) => {
+      const btn = event.currentTarget;
+      const feedback = $("#wallet-feedback");
+      btn.disabled = true;
+      if (feedback) {
+        feedback.textContent = "Preparing your Apple Wallet card...";
+        feedback.className = "form-feedback";
+      }
+      const result = await UK_USERS.generateWalletForBooking(btn.dataset.walletBooking);
+      btn.disabled = false;
+      if (!result.ok) {
+        if (feedback) {
+          feedback.textContent = result.error || "Wallet could not be generated.";
+          feedback.className = "form-feedback error";
+        }
+        return;
+      }
+      if (result.wallet && result.wallet.passStatus === "signed" && result.wallet.downloadUrl) {
+        location.href = result.wallet.downloadUrl;
+        return;
+      }
+      if (feedback) {
+        feedback.textContent = result.wallet?.passError || "Wallet membership saved. Apple signing certificates are required before .pkpass download is available.";
+        feedback.className = "form-feedback error";
+      }
+    });
     host.querySelector("[data-new-booking]")?.addEventListener("click", () => {
       _bookingConfirmation = null;
       _bookingStep = 1;
@@ -647,6 +689,7 @@
       "ap-customers": () => renderAdminCustomers(session.adminId),
       "ap-bookings":  () => renderAdminBookings("all"),
       "ap-payments":  () => renderAdminPayments("all"),
+      "ap-wallet":    () => renderAdminWallet(),
       "ap-roster":    () => renderAdminRoster(session.adminId),
       "ap-notifications": () => renderAdminNotifications(session.adminId),
     });
@@ -1281,6 +1324,76 @@
           <td class="dim">${_fmtDateTime(p.updatedAt)}</td>
         </tr>`;
     }).join("");
+  }
+
+  async function renderAdminWallet(flash = "") {
+    const el = $("#ap-wallet-inner"); if (!el) return;
+    const result = await UK_USERS.getWalletStats();
+    const stats = result.ok ? result.stats : {};
+    const wallets = UK_USERS.getAllWallets();
+    const firstWallet = wallets[0] || null;
+    el.innerHTML = `
+      <div class="portal-page-head">
+        <div>
+          <div class="eyebrow mini">Apple Wallet</div>
+          <h2>Membership Cards</h2>
+          <p class="panel-copy">Permanent customer cards for booking updates, visit tracking and rewards.</p>
+        </div>
+      </div>
+      <div class="pt-kpis">
+        <div class="pt-kpi gold"><div class="kpi-label">Total Wallet Members</div><div class="kpi-val">${Number(stats.totalWalletMembers || 0)}</div><div class="kpi-sub">metadata records</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Wallets Generated</div><div class="kpi-val">${Number(stats.walletsGenerated || 0)}</div><div class="kpi-sub">signed passes</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Active Rewards</div><div class="kpi-val">${Number(stats.activeRewards || 0)}</div><div class="kpi-sub">reward available</div></div>
+        <div class="pt-kpi"><div class="kpi-label">Last Updates</div><div class="kpi-val">${Number((stats.lastUpdates || []).length)}</div><div class="kpi-sub">${stats.signingReady ? "signing ready" : "needs certificates"}</div></div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head">
+          <h3>Wallet Actions</h3>
+          <span class="dim">${stats.signingReady ? "Apple signing configured" : `Missing: ${(stats.missingSigningConfig || []).join(", ") || "none"}`}</span>
+        </div>
+        <div class="wallet-admin-actions">
+          <button class="btn btn-gold btn-sm" data-wallet-test>Generate Test Wallet Pass</button>
+          <button class="btn btn-ghost btn-sm" data-wallet-update ${firstWallet ? "" : "disabled"}>Update Existing Wallet</button>
+          <button class="btn btn-ghost btn-sm" data-wallet-visit ${firstWallet ? "" : "disabled"}>Simulate Visit</button>
+          ${firstWallet ? `<a class="btn btn-ghost btn-sm" href="${_escapeHTML(firstWallet.downloadUrl || `/api/wallet/download/${encodeURIComponent(firstWallet.serialNumber)}`)}">Download Latest .pkpass</a>` : ""}
+        </div>
+        <div class="form-feedback ${flash ? "success" : ""}" id="wallet-admin-feedback" aria-live="polite">${_escapeHTML(flash)}</div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head"><h3>Wallet Members</h3><span class="dim">${wallets.length} records</span></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Holder</th><th>Serial</th><th>Status</th><th>Visits</th><th>Reward</th><th>Pass</th><th>Updated</th></tr></thead>
+            <tbody>
+              ${wallets.length ? wallets.map(w => `
+                <tr>
+                  <td>${_escapeHTML(w.holderName || "Member")}</td>
+                  <td><span class="dim">${_escapeHTML(w.serialNumber || "")}</span></td>
+                  <td>${_statusBadge(w.bookingStatus || "pending")}</td>
+                  <td>${Number(w.visits || 0)} / ${Number(w.visitsGoal || 5)}</td>
+                  <td>${_escapeHTML(w.reward || "Free Haircut After 5 Visits")}</td>
+                  <td><span class="status-badge ${w.passStatus === "signed" ? "confirmed" : "pending"}">${_escapeHTML(w.passStatus || "metadata-only")}</span></td>
+                  <td class="dim">${_escapeHTML((w.updatedAt || "").slice(0, 16).replace("T", " "))}</td>
+                </tr>
+              `).join("") : `<tr><td colspan="7"><div class="pt-empty">No Wallet members yet.</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const show = (response, successText) => renderAdminWallet(response.ok ? successText : response.error);
+    el.querySelector("[data-wallet-test]")?.addEventListener("click", async () => show(await UK_USERS.generateTestWallet(), "Test Wallet metadata generated."));
+    el.querySelector("[data-wallet-update]")?.addEventListener("click", async () => {
+      if (firstWallet) show(await UK_USERS.updateWallet(firstWallet.serialNumber), "Wallet metadata refreshed.");
+    });
+    el.querySelector("[data-wallet-visit]")?.addEventListener("click", async () => {
+      if (firstWallet) show(await UK_USERS.simulateWalletVisit(firstWallet.serialNumber), "Visit simulated.");
+    });
+    const feedback = $("#wallet-admin-feedback");
+    if (!result.ok && feedback) {
+      feedback.textContent = result.error;
+      feedback.className = "form-feedback error";
+    }
   }
 
   function renderAdminNotifications(adminId, flash = "") {
@@ -2372,7 +2485,6 @@
     tl.from(".hero-logo",      { y: 34, opacity: 0, scale: 0.9, duration: 1 })
       .from(".hero .eyebrow",  { y: 14, opacity: 0, duration: 0.6 }, "-=0.5")
       .from(".hero h1",        { y: 30, opacity: 0, duration: 0.95 }, "-=0.35")
-      .from(".hero .tagline",  { y: 18, opacity: 0, duration: 0.7 }, "-=0.55")
       .from(".hero .subtitle", { y: 18, opacity: 0, duration: 0.6 }, "-=0.5")
       .from(".hero-ctas .btn", { y: 18, opacity: 0, duration: 0.55, stagger: 0.1 }, "-=0.3")
       .from(".hero-location",  { y: 14, opacity: 0, duration: 0.5 }, "-=0.3")

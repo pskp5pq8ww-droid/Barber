@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Guia de Codigo para Sistemas Empresariales Modulares</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #1d252c;
+      background: #f5f7f8;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      line-height: 1.48;
+      font-size: 11.2pt;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      background: #ffffff;
+    }
+
+    section {
+      page-break-inside: avoid;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: #101820;
+      line-height: 1.15;
+      margin: 0 0 10px;
+    }
+
+    h1 {
+      font-size: 30pt;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 18pt;
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 2px solid #d6b25e;
+    }
+
+    h3 {
+      font-size: 13pt;
+      margin-top: 18px;
+    }
+
+    p {
+      margin: 0 0 10px;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 12px 21px;
+      padding: 0;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #edf1f4;
+      color: #0e3a53;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 9.5pt;
+    }
+
+    pre {
+      margin: 10px 0 14px;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
+      background: #101820;
+      color: #edf7fb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 8.8pt;
+      line-height: 1.45;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 9.8pt;
+    }
+
+    th,
+    td {
+      vertical-align: top;
+      padding: 8px 9px;
+      border: 1px solid #d8e0e5;
+    }
+
+    th {
+      background: #edf1f4;
+      color: #101820;
+      text-align: left;
+    }
+
+    .cover {
+      min-height: 92vh;
+      padding: 56px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: linear-gradient(145deg, #101820 0%, #1d3039 58%, #d6b25e 170%);
+      color: #ffffff;
+    }
+
+    .cover h1,
+    .cover h2,
+    .cover p {
+      color: #ffffff;
+      border: 0;
+    }
+
+    .cover .eyebrow {
+      color: #d6b25e;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 10pt;
+      font-weight: 700;
+    }
+
+    .cover .subtitle {
+      max-width: 680px;
+      font-size: 15pt;
+      color: #e9eef1;
+    }
+
+    .cover .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .cover .meta div {
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .page {
+      padding: 34px 44px;
+    }
+
+    .note {
+      margin: 12px 0 16px;
+      padding: 12px 14px;
+      border-left: 4px solid #d6b25e;
+      background: #fff8e7;
+      border-radius: 6px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 12px 0 16px;
+    }
+
+    .card {
+      border: 1px solid #d8e0e5;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfd;
+    }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .flow {
+      display: grid;
+      gap: 8px;
+      margin: 12px 0 16px;
+    }
+
+    .flow div {
+      padding: 9px 11px;
+      border-radius: 7px;
+      background: #edf1f4;
+      border-left: 4px solid #4d7c91;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 16px;
+    }
+
+    .small {
+      font-size: 9.4pt;
+      color: #53616b;
+    }
+
+    .toc a {
+      color: #0e3a53;
+      text-decoration: none;
+    }
+
+    .checklist li {
+      list-style: square;
+    }
+
+    .break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="cover">
+    <div>
+      <p class="eyebrow">Guia tecnica reutilizable</p>
+      <h1>Como construir un sistema empresarial modular para pequenas y medianas empresas</h1>
+      <p class="subtitle">
+        Documento para que otra IA, equipo tecnico o desarrollador entienda como construir,
+        desplegar, asegurar y ampliar una aplicacion web de gestion de procesos empresariales
+        usando una arquitectura simple compatible con Hostinger.
+      </p>
+      <div class="meta">
+        <div><strong>Tipo</strong><br />Guia de codigo y arquitectura</div>
+        <div><strong>Plataforma</strong><br />Node.js, frontend web y Hostinger</div>
+        <div><strong>Fecha</strong><br />11 de junio de 2026</div>
+      </div>
+    </div>
+    <p class="small">
+      Este documento no depende de una industria especifica. Usa terminos generales como
+      usuarios, equipo, clientes, servicios, reservas, tareas, pagos, notificaciones y reportes.
+    </p>
+  </section>
+
+  <section class="page toc">
+    <h2>Indice</h2>
+    <ol>
+      <li><a href="#objetivo">Objetivo del sistema</a></li>
+      <li><a href="#arquitectura">Arquitectura recomendada</a></li>
+      <li><a href="#modulos">Modulos funcionales</a></li>
+      <li><a href="#datos">Modelo de datos base</a></li>
+      <li><a href="#api">API y flujos principales</a></li>
+      <li><a href="#frontend">Frontend y experiencia de usuario</a></li>
+      <li><a href="#seguridad">Seguridad minima y seguridad avanzada</a></li>
+      <li><a href="#hostinger">Despliegue en Hostinger</a></li>
+      <li><a href="#calidad">Pruebas, observabilidad y mantenimiento</a></li>
+      <li><a href="#mejoras">Mejoras futuras para empresas</a></li>
+      <li><a href="#prompt">Instrucciones para otra IA</a></li>
+    </ol>
+  </section>
+
+  <section id="objetivo" class="page">
+    <h2>1. Objetivo del sistema</h2>
+    <p>
+      El objetivo es construir una aplicacion web que ayude a una empresa pequena o mediana a
+      administrar procesos diarios desde un panel central. El sistema debe permitir operar sin
+      depender de hojas de calculo dispersas, mensajes manuales o registros duplicados.
+    </p>
+    <p>
+      En terminos generales, el sistema debe cubrir tres necesidades:
+    </p>
+    <ul>
+      <li><strong>Gestion operativa:</strong> crear usuarios, asignar trabajo, administrar agendas, controlar estados y registrar actividad.</li>
+      <li><strong>Autoservicio:</strong> permitir que clientes, miembros del equipo o proveedores hagan solicitudes, consulten informacion y reciban notificaciones.</li>
+      <li><strong>Control de negocio:</strong> mostrar metricas, reportes, pagos, historial y datos accionables para tomar decisiones.</li>
+    </ul>
+    <div class="note">
+      Para mantenerlo reutilizable, evita nombres de dominio muy especificos en el nucleo. En vez
+      de codificar una industria, crea entidades genericas como <code>staff</code>, <code>customers</code>,
+      <code>services</code>, <code>bookings</code>, <code>tasks</code>, <code>payments</code> y <code>notifications</code>.
+      Luego cada empresa puede cambiar textos, etiquetas y reglas sin reescribir la base tecnica.
+    </div>
+  </section>
+
+  <section id="arquitectura" class="page">
+    <h2>2. Arquitectura recomendada</h2>
+    <p>
+      Para una primera version comercial orientada a PYMES, conviene una arquitectura simple:
+      servidor Node.js, frontend HTML/CSS/JavaScript o framework ligero, API interna, sesiones
+      seguras, almacenamiento persistente y despliegue en hosting administrado.
+    </p>
+
+    <div class="flow">
+      <div><strong>Cliente web:</strong> paginas publicas, login, paneles por rol y formularios.</div>
+      <div><strong>API Node.js:</strong> autenticacion, reglas de negocio, validacion, permisos y escritura de datos.</div>
+      <div><strong>Persistencia:</strong> JSON para MVP o base de datos SQL/PostgreSQL para produccion escalable.</div>
+      <div><strong>Hosting:</strong> Hostinger Node.js app, dominio, HTTPS, variables de entorno y storage persistente.</div>
+    </div>
+
+    <h3>Estructura de carpetas sugerida</h3>
+    <pre>project/
+  server.js                  # Servidor Node.js: API + archivos estaticos
+  package.json               # Scripts, version de Node y metadatos
+  index.html                 # Aplicacion principal o entrada SPA
+  admin.html                 # Redireccion o entrada de panel administrativo
+  css/
+    base.css                 # Tokens visuales, reset, layout base
+    app.css                  # Componentes generales
+    admin.css                # Estilos de panel interno
+  js/
+    app.js                   # Renderizado, rutas y eventos del frontend
+    auth.js                  # Cliente de login/logout y sesion local
+    users-data.js            # Cache cliente sincronizada con API
+    data.js                  # Catalogos publicos: servicios, textos, opciones
+  assets/                    # Logos, imagenes y fuentes publicas
+  storage/
+    cd/
+      data/                  # JSON persistente en MVP
+      backups/               # Backups automaticos
+      uploads/               # Archivos privados o semi-privados
+  docs/                      # Guias, manuales y documentacion tecnica</pre>
+
+    <h3>Principios de diseno tecnico</h3>
+    <ul>
+      <li><strong>Separar presentacion y negocio:</strong> el frontend no decide permisos criticos ni valida contrasenas.</li>
+      <li><strong>Servidor como autoridad:</strong> el servidor crea sesiones, filtra datos por rol y registra acciones.</li>
+      <li><strong>Configuracion por entorno:</strong> rutas, secretos y claves deben venir de variables de entorno.</li>
+      <li><strong>Persistencia predecible:</strong> cada coleccion tiene un archivo o tabla clara, con backups y migraciones.</li>
+      <li><strong>Dominio adaptable:</strong> los nombres visibles pueden cambiar por industria, pero el modelo interno debe mantenerse consistente.</li>
+    </ul>
+  </section>
+
+  <section id="modulos" class="page break">
+    <h2>3. Modulos funcionales</h2>
+    <p>
+      Un sistema empresarial de este tipo se construye como una coleccion de modulos conectados.
+      Cada modulo debe tener datos, vistas, permisos, acciones y eventos de auditoria.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Modulo</th>
+          <th>Funcion</th>
+          <th>Usuarios tipicos</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Autenticacion</td>
+          <td>Login, logout, sesiones, recuperacion de acceso y control por rol.</td>
+          <td>Admin, equipo, cliente</td>
+        </tr>
+        <tr>
+          <td>Panel administrativo</td>
+          <td>Vista central para gestionar usuarios, servicios, agenda, pagos, reportes y configuracion.</td>
+          <td>Admin, gerente</td>
+        </tr>
+        <tr>
+          <td>Gestion de equipo</td>
+          <td>Crear miembros, asignar identificadores, credenciales, especialidades, disponibilidad y estado.</td>
+          <td>Admin, RRHH, operaciones</td>
+        </tr>
+        <tr>
+          <td>Gestion de clientes</td>
+          <td>Registrar clientes, historial, preferencias, datos de contacto y seguimiento.</td>
+          <td>Admin, ventas, soporte</td>
+        </tr>
+        <tr>
+          <td>Servicios o productos</td>
+          <td>Catalogo configurable con precios, duraciones, categorias, recursos requeridos y disponibilidad.</td>
+          <td>Admin, cliente</td>
+        </tr>
+        <tr>
+          <td>Reservas, tareas o solicitudes</td>
+          <td>Crear trabajo operativo, asignarlo a un responsable, cambiar estado y registrar notas.</td>
+          <td>Cliente, equipo, admin</td>
+        </tr>
+        <tr>
+          <td>Calendario y turnos</td>
+          <td>Disponibilidad, turnos, ausencias, bloqueos y conflictos.</td>
+          <td>Equipo, admin</td>
+        </tr>
+        <tr>
+          <td>Pagos</td>
+          <td>Registro de pagos, estado, conciliacion, recibos e integracion con pasarelas.</td>
+          <td>Admin, finanzas, cliente</td>
+        </tr>
+        <tr>
+          <td>Notificaciones</td>
+          <td>Mensajes internos, email, SMS, WhatsApp, recordatorios y alertas de cambios.</td>
+          <td>Todos</td>
+        </tr>
+        <tr>
+          <td>Reportes</td>
+          <td>Metricas de actividad, ingresos, productividad, retencion, tiempos y conversion.</td>
+          <td>Admin, gerencia</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Roles base</h3>
+    <div class="grid">
+      <div class="card">
+        <h3>Administrador</h3>
+        <p>Controla configuracion, usuarios, permisos, reportes, pagos, agenda global y datos maestros.</p>
+      </div>
+      <div class="card">
+        <h3>Equipo interno</h3>
+        <p>Recibe asignaciones, actualiza estados, ve su propia agenda y responde notificaciones.</p>
+      </div>
+      <div class="card">
+        <h3>Cliente</h3>
+        <p>Crea solicitudes, consulta historial, actualiza datos, paga y recibe confirmaciones.</p>
+      </div>
+      <div class="card">
+        <h3>Operador invitado</h3>
+        <p>Puede crear una solicitud publica sin cuenta, con datos minimos y seguimiento limitado.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="datos" class="page">
+    <h2>4. Modelo de datos base</h2>
+    <p>
+      Para un MVP, los datos pueden vivir en archivos JSON persistentes. Para produccion con
+      multiples clientes, mayor volumen o auditoria estricta, se debe migrar a una base SQL.
+      La forma de los datos debe disenar esa migracion desde el principio.
+    </p>
+
+    <h3>Colecciones recomendadas</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Coleccion</th>
+          <th>Campos importantes</th>
+          <th>Notas</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>admins</code></td>
+          <td><code>id</code>, <code>username</code>, <code>passwordHash</code>, <code>email</code>, <code>status</code></td>
+          <td>No exponer hashes al frontend. Mantener cuentas de emergencia configurables.</td>
+        </tr>
+        <tr>
+          <td><code>staff</code></td>
+          <td><code>id</code>, <code>staffCode</code>, <code>username</code>, <code>profile</code>, <code>availability</code></td>
+          <td>El identificador operativo ayuda a enrutar tareas o reservas al responsable correcto.</td>
+        </tr>
+        <tr>
+          <td><code>customers</code></td>
+          <td><code>id</code>, <code>name</code>, <code>email</code>, <code>phone</code>, <code>preferences</code></td>
+          <td>Debe cumplir politicas de privacidad y minimizacion de datos.</td>
+        </tr>
+        <tr>
+          <td><code>services</code></td>
+          <td><code>id</code>, <code>name</code>, <code>price</code>, <code>duration</code>, <code>category</code></td>
+          <td>Debe ser editable desde admin cuando el negocio madure.</td>
+        </tr>
+        <tr>
+          <td><code>bookings</code> o <code>tasks</code></td>
+          <td><code>id</code>, <code>customerId</code>, <code>staffId</code>, <code>staffCode</code>, <code>date</code>, <code>status</code></td>
+          <td>Guardar tanto ID como codigo operativo facilita auditoria y reportes.</td>
+        </tr>
+        <tr>
+          <td><code>roster</code></td>
+          <td><code>id</code>, <code>staffId</code>, <code>date</code>, <code>startTime</code>, <code>endTime</code>, <code>status</code></td>
+          <td>Usado para disponibilidad, ausencias, turnos y conflictos.</td>
+        </tr>
+        <tr>
+          <td><code>payments</code></td>
+          <td><code>id</code>, <code>bookingId</code>, <code>amount</code>, <code>provider</code>, <code>status</code></td>
+          <td>Separar pago de solicitud permite conciliacion y reintentos.</td>
+        </tr>
+        <tr>
+          <td><code>sessions</code></td>
+          <td><code>token</code>, <code>userId</code>, <code>role</code>, <code>expiresAt</code></td>
+          <td>Usar cookies HttpOnly. Limpiar sesiones vencidas.</td>
+        </tr>
+        <tr>
+          <td><code>activityLog</code></td>
+          <td><code>actorId</code>, <code>actorRole</code>, <code>action</code>, <code>entityId</code>, <code>createdAt</code></td>
+          <td>Necesario para soporte, auditoria y trazabilidad.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Ejemplo generico de una solicitud operativa</h3>
+    <pre>{
+  "id": "task001",
+  "customerId": "c001",
+  "customerName": "Cliente Demo",
+  "staffId": "s001",
+  "staffCode": "EMP-001",
+  "serviceId": "svc001",
+  "serviceName": "Servicio principal",
+  "date": "2026-06-20",
+  "time": "10:00",
+  "duration": 45,
+  "price": 120,
+  "status": "pending",
+  "paymentStatus": "unpaid",
+  "source": "website",
+  "notes": "",
+  "createdAt": "2026-06-11T00:00:00.000Z",
+  "updatedAt": "2026-06-11T00:00:00.000Z"
+}</pre>
+  </section>
+
+  <section id="api" class="page break">
+    <h2>5. API y flujos principales</h2>
+    <p>
+      La API debe ser pequena, consistente y facil de auditar. Todas las escrituras importantes
+      deben pasar por el servidor, no por manipulacion directa de archivos desde el frontend.
+    </p>
+
+    <h3>Endpoints base</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>Metodo</th>
+          <th>Uso</th>
+          <th>Permiso</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/api/health</code></td>
+          <td>GET</td>
+          <td>Verifica que el servidor y storage esten activos.</td>
+          <td>Publico</td>
+        </tr>
+        <tr>
+          <td><code>/api/bootstrap</code></td>
+          <td>GET</td>
+          <td>Carga datos visibles segun sesion.</td>
+          <td>Publico o autenticado</td>
+        </tr>
+        <tr>
+          <td><code>/api/auth/login</code></td>
+          <td>POST</td>
+          <td>Valida credenciales, crea cookie HttpOnly y retorna sesion sanitizada.</td>
+          <td>Publico</td>
+        </tr>
+        <tr>
+          <td><code>/api/auth/logout</code></td>
+          <td>POST</td>
+          <td>Invalida la sesion actual.</td>
+          <td>Autenticado</td>
+        </tr>
+        <tr>
+          <td><code>/api/users/staff</code></td>
+          <td>POST/PATCH/DELETE</td>
+          <td>Crea, edita o desactiva usuarios del equipo.</td>
+          <td>Admin</td>
+        </tr>
+        <tr>
+          <td><code>/api/users/customers</code></td>
+          <td>POST/PATCH/DELETE</td>
+          <td>Gestiona clientes.</td>
+          <td>Admin o propietario</td>
+        </tr>
+        <tr>
+          <td><code>/api/bookings</code> o <code>/api/tasks</code></td>
+          <td>GET/POST</td>
+          <td>Lista o crea solicitudes operativas.</td>
+          <td>Segun rol</td>
+        </tr>
+        <tr>
+          <td><code>/api/payments</code></td>
+          <td>POST/PATCH</td>
+          <td>Registra pagos y actualiza estado financiero.</td>
+          <td>Admin o sistema</td>
+        </tr>
+        <tr>
+          <td><code>/api/notifications</code></td>
+          <td>POST/PATCH</td>
+          <td>Envia mensajes y marca notificaciones como leidas.</td>
+          <td>Segun rol</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Flujo de login</h3>
+    <ol>
+      <li>El usuario envia <code>username</code>, <code>password</code> y rol esperado.</li>
+      <li>El servidor normaliza el username y busca en la coleccion correcta.</li>
+      <li>La contrasena se compara contra <code>passwordHash</code> con PBKDF2, bcrypt o Argon2.</li>
+      <li>Si es correcto y el usuario esta activo, se crea una sesion con expiracion.</li>
+      <li>El servidor devuelve una cookie <code>HttpOnly</code>, <code>SameSite</code> y <code>Secure</code> en HTTPS.</li>
+      <li>El frontend guarda solo una copia sanitizada de la sesion para navegacion, nunca hashes.</li>
+    </ol>
+
+    <h3>Flujo de creacion de solicitud</h3>
+    <ol>
+      <li>El cliente o admin selecciona servicio, fecha, hora y responsable.</li>
+      <li>El servidor valida disponibilidad, estado del responsable, conflictos y campos requeridos.</li>
+      <li>La solicitud se guarda con <code>staffId</code> y <code>staffCode</code>.</li>
+      <li>Se registra un evento en <code>activityLog</code>.</li>
+      <li>Se notifica al responsable y al cliente.</li>
+      <li>Los paneles se actualizan usando datos filtrados por rol.</li>
+    </ol>
+  </section>
+
+  <section id="frontend" class="page">
+    <h2>6. Frontend y experiencia de usuario</h2>
+    <p>
+      El frontend debe mostrar una experiencia distinta por rol sin duplicar reglas criticas.
+      La navegacion puede ser SPA simple con rutas virtuales o framework moderno. Lo importante
+      es mantener la UI sincronizada con la sesion real del servidor.
+    </p>
+
+    <h3>Vistas esenciales</h3>
+    <ul>
+      <li><strong>Pagina publica:</strong> propuesta de valor, catalogo de servicios, llamada a accion y acceso a login.</li>
+      <li><strong>Login unificado:</strong> formulario unico con seleccion de rol o deteccion por usuario.</li>
+      <li><strong>Panel admin:</strong> KPIs, gestion de usuarios, solicitudes, calendario, pagos, notificaciones y reportes.</li>
+      <li><strong>Panel equipo:</strong> agenda propia, tareas asignadas, estados, perfil y mensajes.</li>
+      <li><strong>Panel cliente:</strong> historial, proximas solicitudes, pagos, perfil y preferencias.</li>
+      <li><strong>Formulario publico:</strong> creacion de solicitud sin cuenta, si el negocio lo permite.</li>
+    </ul>
+
+    <h3>Reglas de UI</h3>
+    <ul>
+      <li>No mostrar botones que el rol no puede usar, pero tampoco confiar en eso como seguridad.</li>
+      <li>Las tablas deben tener estados vacios, loading, error, filtros y acciones claras.</li>
+      <li>Los formularios deben validar campos antes de enviar y mostrar errores del servidor sin esconderlos.</li>
+      <li>Despues de login/logout, limpiar estado local y recargar datos desde <code>/api/bootstrap</code>.</li>
+      <li>Evitar cache agresivo para JS durante desarrollo o despliegues frecuentes. Usar versionado de assets si hay CDN.</li>
+    </ul>
+
+    <div class="note">
+      Si aparece un bug donde el login funciona una vez y luego falla tras logout, revisar:
+      rol activo en frontend, cache de JS, sesion local, cookie anterior, respuesta de <code>/api/bootstrap</code>
+      y si el servidor realmente recibio el rol esperado.
+    </div>
+  </section>
+
+  <section id="seguridad" class="page break">
+    <h2>7. Seguridad minima y seguridad avanzada</h2>
+    <p>
+      Un sistema empresarial maneja datos personales, pagos, horarios, notas internas y actividad
+      operativa. La seguridad no puede depender de ocultar botones o confiar en el navegador.
+    </p>
+
+    <h3>Seguridad minima obligatoria</h3>
+    <ul class="checklist">
+      <li>HTTPS obligatorio en produccion.</li>
+      <li>Contrasenas hasheadas con PBKDF2, bcrypt o Argon2. Nunca texto plano.</li>
+      <li>Cookies de sesion con <code>HttpOnly</code>, <code>Secure</code> y <code>SameSite=Lax</code> o <code>Strict</code>.</li>
+      <li>Validacion de permisos en cada endpoint del servidor.</li>
+      <li>Sanitizar datos enviados al frontend. No exponer <code>passwordHash</code>, tokens internos ni secretos.</li>
+      <li>Bloquear acceso web a carpetas privadas como <code>/storage</code>, <code>/.env</code> o archivos ocultos.</li>
+      <li>Registrar eventos importantes: login, fallo de login, creacion, edicion, cancelacion, pago y cambios de permisos.</li>
+      <li>Backups automaticos de datos criticos.</li>
+      <li>Variables de entorno para secretos, rutas, claves de pago y credenciales de emergencia.</li>
+    </ul>
+
+    <h3>Mejoras de seguridad recomendadas</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Mejora</th>
+          <th>Por que importa</th>
+          <th>Prioridad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Rate limiting</td>
+          <td>Reduce ataques de fuerza bruta al login y formularios publicos.</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td>2FA para admin</td>
+          <td>Protege acceso administrativo aun si una contrasena se filtra.</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td>CSRF tokens</td>
+          <td>Protege acciones sensibles cuando se usan cookies.</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td>Politica de contrasenas</td>
+          <td>Exige longitud minima, rotacion de credenciales temporales y bloqueo por intentos.</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td>Cifrado de datos sensibles</td>
+          <td>Protege notas, documentos, identificaciones o informacion financiera.</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td>Auditoria inmutable</td>
+          <td>Evita manipulacion de historial operativo o financiero.</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td>Base de datos gestionada</td>
+          <td>Mejora integridad, concurrencia, backups y escalabilidad.</td>
+          <td>Alta para produccion real</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="hostinger" class="page">
+    <h2>8. Despliegue en Hostinger</h2>
+    <p>
+      Hostinger puede servir aplicaciones Node.js si el plan lo permite. El despliegue debe
+      configurarse para que el proceso Node arranque con el archivo correcto, tenga acceso a
+      storage persistente y use variables de entorno.
+    </p>
+
+    <h3>Configuracion recomendada</h3>
+    <ol>
+      <li>Subir el repositorio o conectar GitHub desde hPanel.</li>
+      <li>Configurar la aplicacion Node.js con <code>server.js</code> como entry point.</li>
+      <li>Usar Node.js 18 o superior.</li>
+      <li>Definir script de inicio: <code>npm start</code> o <code>node server.js</code>.</li>
+      <li>Configurar dominio y HTTPS.</li>
+      <li>Crear una ruta persistente para datos, por ejemplo <code>/storage/cd</code> si Hostinger la permite.</li>
+      <li>Si la ruta absoluta no es escribible, usar fallback dentro de la carpeta Node, por ejemplo <code>nodejs/storage/cd</code>.</li>
+      <li>Bloquear acceso publico a <code>/storage</code> usando servidor Node y reglas <code>.htaccess</code> si aplica.</li>
+      <li>Reiniciar la app Node despues de cada deploy que cambie servidor, rutas o variables de entorno.</li>
+    </ol>
+
+    <h3>Variables de entorno sugeridas</h3>
+    <pre>PORT=8123
+NODE_ENV=production
+APP_URL=https://empresa.com
+STORAGE_DIR=/home/usuario/domains/empresa.com/nodejs/storage/cd
+ADMIN_PASSWORD=usar_un_secreto_largo
+SESSION_SECRET=usar_un_token_largo
+PAYMENT_PROVIDER_KEY=clave_del_proveedor
+EMAIL_API_KEY=clave_de_email
+SMS_API_KEY=clave_de_sms</pre>
+
+    <h3>Problemas comunes en Hostinger</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa probable</th>
+          <th>Solucion</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>503</code></td>
+          <td>La app Node no arranco o se cayo al iniciar.</td>
+          <td>Revisar logs, entry point, version de Node y permisos de storage.</td>
+        </tr>
+        <tr>
+          <td>Login falla tras deploy</td>
+          <td>JS viejo en cache, rol incorrecto, servidor no reiniciado o storage con datos antiguos.</td>
+          <td>Forzar no-cache, reiniciar Node, validar <code>/api/auth/login</code> con curl.</td>
+        </tr>
+        <tr>
+          <td>Datos desaparecen</td>
+          <td>Storage dentro de carpeta temporal o deploy sobrescribe archivos.</td>
+          <td>Usar ruta persistente fuera del build y backups.</td>
+        </tr>
+        <tr>
+          <td>Archivos privados visibles</td>
+          <td>Carpeta storage servida como estatica.</td>
+          <td>Bloquear <code>/storage</code> desde Node y reglas del servidor web.</td>
+        </tr>
+        <tr>
+          <td>API responde HTML</td>
+          <td>Fallback SPA captura rutas API.</td>
+          <td>Procesar <code>/api/</code> antes del fallback estatico.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="calidad" class="page break">
+    <h2>9. Pruebas, observabilidad y mantenimiento</h2>
+    <p>
+      Un sistema empresarial necesita pruebas practicas, no solo revision visual. Cada flujo
+      principal debe verificarse con API y navegador.
+    </p>
+
+    <h3>Checklist de pruebas antes de deploy</h3>
+    <ul class="checklist">
+      <li><code>node --check server.js</code> para validar sintaxis del servidor.</li>
+      <li><code>node --check js/app.js</code> y <code>node --check js/auth.js</code> para validar scripts principales.</li>
+      <li>Login admin, equipo y cliente.</li>
+      <li>Logout y segundo login con el mismo usuario.</li>
+      <li>Creacion de usuario de equipo y verificacion de identificador operativo.</li>
+      <li>Creacion de solicitud asignada y visibilidad correcta en panel del responsable.</li>
+      <li>Edicion/cancelacion de solicitud con permisos correctos.</li>
+      <li>Acceso bloqueado a rutas privadas sin sesion.</li>
+      <li>Acceso bloqueado a <code>/storage</code> desde navegador.</li>
+      <li>Prueba de <code>/api/health</code> en produccion.</li>
+    </ul>
+
+    <h3>Observabilidad minima</h3>
+    <ul>
+      <li>Endpoint <code>/api/health</code> con estado del servidor y storage activo.</li>
+      <li>Logs de errores de arranque.</li>
+      <li>Registro de acciones en <code>activityLog</code>.</li>
+      <li>Backups por fecha para colecciones criticas.</li>
+      <li>Alertas futuras por email o dashboard cuando fallan pagos, login o escritura.</li>
+    </ul>
+
+    <h3>Migracion futura a base de datos</h3>
+    <p>
+      JSON puede funcionar para prototipos y negocios pequenos con bajo trafico. Cuando el sistema
+      tenga concurrencia real, multiples sedes o datos financieros criticos, migrar a PostgreSQL,
+      MySQL o una base gestionada. Mantener IDs, timestamps y colecciones limpias facilita esa
+      transicion.
+    </p>
+  </section>
+
+  <section id="mejoras" class="page">
+    <h2>10. Mejoras futuras para optimizar empresas</h2>
+    <p>
+      El sistema puede evolucionar desde una herramienta operativa simple hacia una plataforma
+      de optimizacion empresarial. Estas funciones agregan valor para empresas medianas sin
+      rehacer la arquitectura base.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Automatizacion de tareas</h3>
+        <p>Reglas para asignar responsables, enviar recordatorios, cambiar estados y escalar retrasos.</p>
+      </div>
+      <div class="card">
+        <h3>CRM ligero</h3>
+        <p>Seguimiento de clientes, oportunidades, historial, etiquetas, segmentos y proxima accion.</p>
+      </div>
+      <div class="card">
+        <h3>Inventario</h3>
+        <p>Control de stock, alertas de bajo inventario, compras y consumo asociado a servicios.</p>
+      </div>
+      <div class="card">
+        <h3>Facturacion</h3>
+        <p>Recibos, facturas, impuestos, conciliacion y exportacion contable.</p>
+      </div>
+      <div class="card">
+        <h3>Analitica avanzada</h3>
+        <p>Ingresos por periodo, productividad, tiempos promedio, retencion, cancelaciones y demanda.</p>
+      </div>
+      <div class="card">
+        <h3>Multi-sucursal</h3>
+        <p>Separar sedes, horarios, personal, inventario, reportes y permisos por ubicacion.</p>
+      </div>
+      <div class="card">
+        <h3>Portal de proveedores</h3>
+        <p>Pedidos, entregas, documentos, pagos pendientes y comunicacion con proveedores.</p>
+      </div>
+      <div class="card">
+        <h3>Asistente IA</h3>
+        <p>Resumen de actividad, sugerencias de agenda, respuestas a clientes y deteccion de problemas.</p>
+      </div>
+    </div>
+
+    <h3>Ruta de producto recomendada</h3>
+    <ol>
+      <li><strong>MVP:</strong> login, roles, usuarios, solicitudes, agenda, notificaciones basicas y backups.</li>
+      <li><strong>Operacion real:</strong> pagos, reportes, auditoria, permisos finos y calendario robusto.</li>
+      <li><strong>Escalabilidad:</strong> base de datos, multi-sucursal, colas de trabajo y jobs programados.</li>
+      <li><strong>Inteligencia:</strong> predicciones, automatizaciones, recomendaciones y analisis de rendimiento.</li>
+      <li><strong>Plataforma:</strong> plantillas por industria, configuracion sin codigo y marketplace de integraciones.</li>
+    </ol>
+  </section>
+
+  <section id="prompt" class="page break">
+    <h2>11. Instrucciones para otra IA</h2>
+    <p>
+      Usa este bloque como especificacion para pedirle a otra IA que construya un sistema similar.
+      La IA debe adaptar nombres y procesos al negocio especifico, pero conservar la arquitectura,
+      seguridad y separacion de responsabilidades.
+    </p>
+
+    <pre>Construye una aplicacion web empresarial modular para una PYME.
+
+Objetivo:
+- Digitalizar procesos operativos como solicitudes, reservas, tareas, clientes, equipo, pagos,
+  notificaciones, agenda y reportes.
+- El sistema debe ser adaptable a diferentes industrias. No amarres el codigo a una sola
+  categoria de negocio.
+
+Arquitectura:
+- Node.js como servidor principal.
+- Frontend web con HTML/CSS/JS o framework moderno.
+- API interna bajo /api.
+- Sesiones con cookies HttpOnly.
+- Roles: admin, staff/equipo, customer/cliente.
+- Storage persistente en Hostinger. Usar JSON para MVP, pero disenar para migrar a SQL.
+
+Modulos:
+- Login/logout y proteccion por rol.
+- Panel admin con usuarios, solicitudes, calendario, pagos, notificaciones, reportes y settings.
+- Panel de equipo con tareas propias, agenda y perfil.
+- Panel de cliente con historial, solicitudes, pagos y perfil.
+- Formulario publico opcional para solicitudes sin cuenta.
+- Logs de actividad y backups.
+
+Seguridad:
+- Nunca guardar contrasenas en texto plano.
+- No enviar passwordHash al frontend.
+- Validar permisos en servidor, no solo en UI.
+- Bloquear acceso a storage, .env y archivos ocultos.
+- Usar HTTPS, cookies Secure, HttpOnly y SameSite.
+- Agregar rate limiting, 2FA admin y CSRF tokens en version avanzada.
+
+Hostinger:
+- Entry point: server.js.
+- Script: npm start o node server.js.
+- Node >= 18.
+- Usar ruta persistente para storage.
+- Si /storage/cd no es escribible, usar fallback dentro de nodejs/storage/cd.
+- Reiniciar la app Node despues de cada deploy.
+- Verificar /api/health y /api/auth/login despues de subir cambios.
+
+Calidad:
+- Crear checklist de pruebas para login, logout, creacion de usuarios, asignacion de tareas,
+  visibilidad por rol, pagos, notificaciones y bloqueo de rutas privadas.
+- Mantener documentacion de estructura, endpoints, variables de entorno y tareas de deploy.</pre>
+
+    <h3>Criterios de aceptacion</h3>
+    <ul class="checklist">
+      <li>Un admin puede entrar, salir y volver a entrar sin error de rol.</li>
+      <li>Un usuario de equipo ve solo sus tareas o solicitudes asignadas.</li>
+      <li>El admin ve todas las solicitudes y puede reasignarlas.</li>
+      <li>El cliente ve solo sus propios datos.</li>
+      <li>Las contrasenas nunca aparecen en respuestas API.</li>
+      <li>El sistema arranca correctamente en Hostinger y responde <code>/api/health</code>.</li>
+      <li>Los datos persisten despues de reiniciar la app.</li>
+      <li>Existe una estrategia clara de backups y migracion futura a base de datos.</li>
+    </ul>
+  </section>
+
+  <section class="page">
+    <h2>Resumen ejecutivo</h2>
+    <p>
+      La forma mas practica de construir este tipo de sistema es comenzar con una arquitectura
+      simple y disciplinada: Node.js, API propia, frontend por roles, storage persistente,
+      sesiones seguras, logs y backups. La clave no es tener muchos modulos desde el primer dia,
+      sino que cada modulo respete permisos, datos limpios y flujos verificables.
+    </p>
+    <p>
+      Cuando el producto gane usuarios, la evolucion natural es migrar la persistencia a SQL,
+      agregar integraciones externas, automatizaciones y analitica. Si la base se construye con
+      entidades genericas y seguridad en servidor, el mismo codigo puede adaptarse a multiples
+      industrias y empresas sin rehacer la plataforma.
+    </p>
+  </section>
+</main>
+</body>
+</html>

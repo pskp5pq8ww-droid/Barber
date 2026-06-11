@@ -3,6 +3,7 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const walletService = require("./src/lib/wallet");
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8123;
@@ -40,6 +41,7 @@ const DATA_FILES = {
   settings: "settings.json",
   payments: "payments.json",
   sessions: "sessions.json",
+  wallets: "wallets.json",
 };
 
 let writeQueue = Promise.resolve();
@@ -246,6 +248,7 @@ function seedData() {
     activityLog: [],
     payments: [],
     sessions: [],
+    wallets: [],
     settings: {
       businessName: "Urban Kings",
       timezone: "Australia/Brisbane",
@@ -488,12 +491,16 @@ function decorateBooking(booking, store) {
   const customer = booking.customerId ? store.customers.find(c => c.id === booking.customerId) : null;
   const barber = booking.barberId ? store.barbers.find(b => b.id === booking.barberId) : null;
   const payment = store.payments.find(p => p.bookingId === booking.id) || null;
+  const wallet = booking.walletSerialNumber && Array.isArray(store.wallets)
+    ? store.wallets.find(item => item.serialNumber === booking.walletSerialNumber)
+    : null;
   return {
     ...clone(booking),
     service: booking.service || booking.serviceName,
     customer: customer ? sanitizeUser(customer) : null,
     barber: barber ? sanitizeUser(barber) : null,
     payment: payment ? clone(payment) : null,
+    wallet: publicWallet(wallet),
   };
 }
 
@@ -551,6 +558,62 @@ function cookieHeader(token, maxAge = SESSION_TTL_MS / 1000) {
   return `uk_session=${encodeURIComponent(token)}; Path=/; Max-Age=${Math.floor(maxAge)}; HttpOnly; SameSite=Lax`;
 }
 
+function walletDownloadUrl(metadata) {
+  if (!metadata || !metadata.serialNumber || !metadata.authenticationToken) return "";
+  return `/api/wallet/download/${encodeURIComponent(metadata.serialNumber)}?token=${encodeURIComponent(metadata.authenticationToken)}`;
+}
+
+function publicWallet(metadata) {
+  if (!metadata) return null;
+  return {
+    walletId: metadata.walletId,
+    customerId: metadata.customerId,
+    serialNumber: metadata.serialNumber,
+    holderName: metadata.holderName,
+    membershipStatus: metadata.membershipStatus,
+    bookingStatus: metadata.bookingStatus,
+    visits: metadata.visits,
+    visitsGoal: metadata.visitsGoal,
+    reward: metadata.reward,
+    createdAt: metadata.createdAt,
+    updatedAt: metadata.updatedAt,
+    lastBookingId: metadata.lastBookingId,
+    passStatus: metadata.passStatus,
+    passError: metadata.passError,
+    downloadUrl: walletDownloadUrl(metadata),
+  };
+}
+
+function attachWalletToBooking(booking, metadata) {
+  if (!booking || !metadata) return booking;
+  booking.walletSerialNumber = metadata.serialNumber;
+  booking.walletCustomerId = metadata.customerId;
+  booking.walletPassStatus = metadata.passStatus;
+  booking.walletUpdatedAt = metadata.updatedAt;
+  return booking;
+}
+
+function upsertWalletIndex(store, metadata) {
+  if (!metadata) return;
+  if (!Array.isArray(store.wallets)) store.wallets = [];
+  const publicEntry = publicWallet(metadata);
+  const index = store.wallets.findIndex(item => item.serialNumber === metadata.serialNumber || item.customerId === metadata.customerId);
+  if (index >= 0) store.wallets[index] = publicEntry;
+  else store.wallets.unshift(publicEntry);
+}
+
+function sendPkPass(res, filePath, serialNumber) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) return json(res, 404, { ok: false, error: "Pass file not found." });
+    res.writeHead(200, {
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="${serialNumber}.pkpass"`,
+      "Cache-Control": "no-store",
+    });
+    res.end(data);
+  });
+}
+
 async function getSession(req, store) {
   const token = parseCookies(req).uk_session;
   if (!token) return null;
@@ -580,6 +643,7 @@ function visibleStore(store, session) {
       notifications: [],
       payments: [],
       activityLog: [],
+      wallets: [],
       settings: store.settings,
     };
   }
@@ -603,6 +667,9 @@ function visibleStore(store, session) {
       ? store.payments
       : store.payments.filter(p => session.role === "customer" && p.customerId === session.customerId),
     activityLog: session.role === "admin" ? store.activityLog : [],
+    wallets: session.role === "admin"
+      ? (store.wallets || [])
+      : (store.wallets || []).filter(w => session.role === "customer" && w.customerId === session.customerId),
     settings: store.settings,
   };
 }
@@ -744,9 +811,12 @@ async function createBooking(store, payload, actor = null) {
     createdAt: now(),
     updatedAt: now(),
   };
+  const walletMetadata = await walletService.ensureWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+  attachWalletToBooking(booking, walletMetadata);
+  upsertWalletIndex(store, walletMetadata);
   store.bookings.unshift(booking);
   addLog(store, actor, "booking.created", `Booking created for ${booking.customerName} at ${booking.date} ${booking.time}.`, { type: "booking", id: booking.id });
-  await writeMany({ bookings: store.bookings, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
+  await writeMany({ bookings: store.bookings, wallets: store.wallets, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
   return { ok: true, booking: decorateBooking(booking, store) };
 }
 
@@ -763,6 +833,98 @@ async function handleApi(req, res, url) {
 
   if (method === "GET" && pathName === "/api/bootstrap") {
     return json(res, 200, { ok: true, data: visibleStore(store, session) });
+  }
+
+  if (method === "GET" && pathName === "/api/wallet/stats") {
+    if (!requireRole(res, session, "admin")) return;
+    const stats = await walletService.walletStats({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
+    return json(res, 200, { ok: true, stats, wallets: store.wallets || [] });
+  }
+
+  if (method === "POST" && pathName === "/api/wallet/generate") {
+    const isAdmin = session && session.role === "admin";
+    const hasAdminKey = process.env.ADMIN_WALLET_KEY && body.adminWalletKey === process.env.ADMIN_WALLET_KEY;
+    const booking = body.bookingId ? store.bookings.find(item => item.id === body.bookingId) : null;
+    if (!isAdmin && !booking && !hasAdminKey) return json(res, 401, { ok: false, error: "Authentication or bookingId is required." });
+
+    const metadata = booking
+      ? await walletService.ensureWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking })
+      : await walletService.generateTestWallet({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
+
+    if (booking) {
+      attachWalletToBooking(booking, metadata);
+      upsertWalletIndex(store, metadata);
+      await writeMany({ bookings: store.bookings, wallets: store.wallets }, { backupKeys: ["bookings"] });
+    } else {
+      upsertWalletIndex(store, metadata);
+      await writeCollection("wallets", store.wallets);
+    }
+
+    return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
+  }
+
+  const walletDownloadMatch = pathName.match(/^\/api\/wallet\/download\/([^/]+)$/);
+  if (walletDownloadMatch && method === "GET") {
+    const serialNumber = decodeURIComponent(walletDownloadMatch[1]);
+    const found = await walletService.findWalletBySerial({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+    if (!found) return json(res, 404, { ok: false, error: "Wallet not found." });
+    const isAdmin = session && session.role === "admin";
+    const token = url.searchParams.get("token") || "";
+    if (!isAdmin && token !== found.metadata.authenticationToken) return json(res, 403, { ok: false, error: "Invalid wallet token." });
+    const result = await walletService.downloadablePass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+    if (!result.ok) return json(res, result.status || 400, result);
+    return sendPkPass(res, result.path, result.metadata.serialNumber);
+  }
+
+  if (method === "POST" && pathName === "/api/wallet/test") {
+    if (!requireRole(res, session, "admin")) return;
+    const metadata = await walletService.generateTestWallet({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
+    upsertWalletIndex(store, metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
+  }
+
+  const walletUpdateMatch = pathName.match(/^\/api\/wallet\/([^/]+)\/update$/);
+  if (walletUpdateMatch && method === "POST") {
+    if (!requireRole(res, session, "admin")) return;
+    const serialNumber = decodeURIComponent(walletUpdateMatch[1]);
+    const found = await walletService.findWalletBySerial({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+    if (!found) return json(res, 404, { ok: false, error: "Wallet not found." });
+    upsertWalletIndex(store, found.metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, wallet: publicWallet(found.metadata) });
+  }
+
+  const walletVisitMatch = pathName.match(/^\/api\/wallet\/([^/]+)\/simulate-visit$/);
+  if (walletVisitMatch && method === "POST") {
+    if (!requireRole(res, session, "admin")) return;
+    const metadata = await walletService.simulateVisit({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber: decodeURIComponent(walletVisitMatch[1]) });
+    if (!metadata) return json(res, 404, { ok: false, error: "Wallet not found." });
+    upsertWalletIndex(store, metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
+  }
+
+  const applePassMatch = pathName.match(/^\/api\/wallet\/v1\/passes\/([^/]+)\/([^/]+)$/);
+  if (applePassMatch && method === "GET") {
+    const serialNumber = decodeURIComponent(applePassMatch[2]);
+    const auth = String(req.headers.authorization || "").replace(/^ApplePass\s+/i, "");
+    const found = await walletService.findWalletBySerial({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+    if (!found) return json(res, 404, { ok: false, error: "Pass not found." });
+    if (auth !== found.metadata.authenticationToken) return json(res, 401, { ok: false, error: "Invalid pass authorization." });
+    const result = await walletService.downloadablePass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+    if (!result.ok) return json(res, result.status || 400, result);
+    return sendPkPass(res, result.path, result.metadata.serialNumber);
+  }
+
+  const appleRegisterMatch = pathName.match(/^\/api\/wallet\/v1\/devices\/([^/]+)\/registrations\/([^/]+)\/([^/]+)$/);
+  if (appleRegisterMatch && ["POST", "DELETE"].includes(method)) {
+    return json(res, 200, { ok: true, message: "Apple Wallet device registration placeholder. Push updates are not active yet." });
+  }
+
+  const appleUpdatesMatch = pathName.match(/^\/api\/wallet\/v1\/devices\/([^/]+)\/registrations\/([^/]+)$/);
+  if (appleUpdatesMatch && method === "GET") {
+    return json(res, 200, { serialNumbers: [], lastUpdated: now() });
   }
 
   if (method === "POST" && pathName === "/api/auth/login") {
@@ -860,8 +1022,14 @@ async function handleApi(req, res, url) {
       next.barberCode = barber.barberCode || barberCodeFromId(barber.id);
     }
     Object.assign(booking, next, { updatedAt: now() });
+    let walletMetadata = await walletService.updateWalletForBookingStatus({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+    if (booking.status === "completed" && booking.walletSerialNumber) {
+      walletMetadata = await walletService.simulateVisit({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber: booking.walletSerialNumber }) || walletMetadata;
+    }
+    upsertWalletIndex(store, walletMetadata);
+    if (walletMetadata) attachWalletToBooking(booking, walletMetadata);
     addLog(store, session, "booking.updated", `${session.role} updated booking ${booking.id}.`, { type: "booking", id: booking.id });
-    await writeMany({ bookings: store.bookings, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
+    await writeMany({ bookings: store.bookings, wallets: store.wallets, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
     return json(res, 200, { ok: true, booking: decorateBooking(booking, store) });
   }
 
@@ -871,8 +1039,11 @@ async function handleApi(req, res, url) {
     if (!booking) return json(res, 404, { ok: false, error: "Booking not found." });
     booking.status = "cancelled";
     booking.updatedAt = now();
+    const walletMetadata = await walletService.updateWalletForBookingStatus({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+    upsertWalletIndex(store, walletMetadata);
+    if (walletMetadata) attachWalletToBooking(booking, walletMetadata);
     addLog(store, session, "booking.cancelled", `Admin cancelled booking ${booking.id}.`, { type: "booking", id: booking.id });
-    await writeMany({ bookings: store.bookings, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
+    await writeMany({ bookings: store.bookings, wallets: store.wallets, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
     return json(res, 200, { ok: true, booking: decorateBooking(booking, store) });
   }
 

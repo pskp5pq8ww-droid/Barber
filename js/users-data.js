@@ -18,6 +18,7 @@ window.UK_USERS = (function () {
     roster: [],
     notifications: [],
     activityLog: [],
+    wallets: [],
     settings: {},
     loaded: false,
   };
@@ -43,6 +44,7 @@ window.UK_USERS = (function () {
     state.roster = data.roster || [];
     state.notifications = data.notifications || [];
     state.activityLog = data.activityLog || [];
+    state.wallets = data.wallets || [];
     state.settings = data.settings || {};
     state.loaded = true;
     return _snapshot();
@@ -58,6 +60,7 @@ window.UK_USERS = (function () {
       roster: _clone(state.roster),
       notifications: _clone(state.notifications),
       activityLog: _clone(state.activityLog),
+      wallets: _clone(state.wallets),
       settings: _clone(state.settings),
     };
   }
@@ -384,6 +387,45 @@ window.UK_USERS = (function () {
     return result;
   }
 
+  function getAllWallets() {
+    return state.wallets.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).map(_clone);
+  }
+
+  async function getWalletStats() {
+    const result = await _api("/api/wallet/stats");
+    if (!result.ok) return result;
+    state.wallets = result.wallets || state.wallets;
+    return result;
+  }
+
+  async function generateWalletForBooking(bookingId) {
+    const result = await _api("/api/wallet/generate", { method: "POST", body: { bookingId } });
+    if (!result.ok) return result;
+    if (result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function generateTestWallet() {
+    const result = await _api("/api/wallet/test", { method: "POST", body: {} });
+    if (!result.ok) return result;
+    if (result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function updateWallet(serialNumber) {
+    const result = await _api(`/api/wallet/${encodeURIComponent(serialNumber)}/update`, { method: "POST", body: {} });
+    if (!result.ok) return result;
+    if (result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function simulateWalletVisit(serialNumber) {
+    const result = await _api(`/api/wallet/${encodeURIComponent(serialNumber)}/simulate-visit`, { method: "POST", body: {} });
+    if (!result.ok) return result;
+    if (result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
   return {
     init,
     setServerData,
@@ -429,6 +471,12 @@ window.UK_USERS = (function () {
     updateRosterShift,
     cancelRosterShift,
     hasRosterConflict,
+    getAllWallets,
+    getWalletStats,
+    generateWalletForBooking,
+    generateTestWallet,
+    updateWallet,
+    simulateWalletVisit,
     DEMO_TODAY: "",
     demoCredentials: {},
   };

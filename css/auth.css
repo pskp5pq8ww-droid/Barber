@@ -1447,6 +1447,53 @@ body[data-view="customer-portal"] #topnav { display: none; }
   margin-top: 12px;
 }
 
+.wallet-membership-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(200,164,93,0.28);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(200,164,93,0.14), rgba(255,255,255,0.045));
+}
+
+.wallet-membership-card h3 {
+  margin: 4px 0 7px;
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.wallet-membership-card p {
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.wallet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.wallet-meta span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.25);
+  color: var(--gold-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.wallet-membership-card .form-feedback {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .status-card {
   text-align: center;
 }
