@@ -69,7 +69,8 @@ async function buildSignedPass(config, metadata, outputPath) {
   const certificates = {
     wwdr: await fsp.readFile(config.wwdrCertPath),
     signerCert: await fsp.readFile(config.certPath),
-    signerKeyPassphrase: config.certPassword,
+    signerKey: await fsp.readFile(config.keyPath),
+    signerKeyPassphrase: config.certPassword || undefined,
   };
 
   const pass = new PKPass({}, certificates, passJson(config, metadata));

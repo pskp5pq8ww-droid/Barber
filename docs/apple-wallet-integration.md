@@ -38,6 +38,7 @@ APPLE_WALLET_PASS_TYPE_ID=pass.com.example.business
 APPLE_WALLET_TEAM_ID=APPLE_TEAM_ID
 APPLE_WALLET_ORG_NAME=Urban Kings Barber
 APPLE_WALLET_CERT_PATH=/private/wallet/certs/pass-certificate.pem
+APPLE_WALLET_KEY_PATH=/private/wallet/certs/apple-wallet-pass.key
 APPLE_WALLET_CERT_PASSWORD=certificate_password
 APPLE_WALLET_WWDR_CERT_PATH=/private/wallet/certs/wwdr.pem
 APPLE_WALLET_STORAGE_PATH=/private/wallet/customers
@@ -64,9 +65,30 @@ Recommended Hostinger path:
 Place:
 
 - Pass certificate/key file referenced by `APPLE_WALLET_CERT_PATH`
+- Private key referenced by `APPLE_WALLET_KEY_PATH`
 - Apple WWDR certificate referenced by `APPLE_WALLET_WWDR_CERT_PATH`
 
-The module expects readable certificate files and uses `APPLE_WALLET_CERT_PASSWORD` as the signer key passphrase.
+The module expects readable PEM certificate files. `APPLE_WALLET_CERT_PASSWORD` is only needed if the private key is encrypted.
+
+Current local files created from Apple Developer:
+
+```text
+private/wallet/certs/apple-wallet-pass.pem
+private/wallet/certs/apple-wallet-pass.key
+private/wallet/certs/AppleWWDRCAG4.pem
+```
+
+Recommended local env values:
+
+```env
+APPLE_WALLET_PASS_TYPE_ID=pass.com.barber.walllet
+APPLE_WALLET_TEAM_ID=5D9PB994JW
+APPLE_WALLET_ORG_NAME=Urban Kings Barber
+APPLE_WALLET_CERT_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/apple-wallet-pass.pem
+APPLE_WALLET_KEY_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/apple-wallet-pass.key
+APPLE_WALLET_WWDR_CERT_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/AppleWWDRCAG4.pem
+APPLE_WALLET_BASE_URL=https://lawngreen-wolverine-255384.hostingersite.com
+```
 
 ## Storage Layout
 
