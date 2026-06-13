@@ -333,8 +333,16 @@
       btn.textContent = originalLabel;
       if (!result.ok) {
         if (feedback) {
-          feedback.textContent = result.error || "We couldn't generate your Wallet Pass. Please try again.";
+          const lines = [result.error || "We couldn't generate your Wallet Pass. Please try again."];
+          if (result.code) lines.push(`Error code: ${result.code}`);
+          if (result.reportId) lines.push(`Report ID: ${result.reportId}`);
+          feedback.innerHTML = lines.map(l => `<div>${_escapeHTML(l)}</div>`).join("")
+            + (result.reportId || result.code ? `<button class="btn btn-ghost btn-sm" type="button" data-wallet-copy-ref data-code="${_escapeHTML(result.code || "")}" data-report="${_escapeHTML(result.reportId || "")}">Copy diagnostic reference</button>` : "");
           feedback.className = "form-feedback error";
+          feedback.querySelector("[data-wallet-copy-ref]")?.addEventListener("click", (e) => {
+            const b = e.currentTarget;
+            _copyToClipboard(`Apple Wallet pass could not be generated.\nError code: ${b.dataset.code || "unknown"}\nReport ID: ${b.dataset.report || "n/a"}`, b);
+          });
         }
         return;
       }
@@ -1325,10 +1333,13 @@
     }).join("");
   }
 
-  async function renderAdminWallet(flash = "", isError = false) {
+  async function renderAdminWallet(flash = "", isError = false, errorMeta = null) {
     const el = $("#ap-wallet-inner"); if (!el) return;
     const result = await UK_USERS.getWalletStats();
     const stats = result.ok ? result.stats : {};
+    const reportsResult = await UK_USERS.getWalletReports(20).catch(() => ({ ok: false }));
+    const reports = reportsResult && reportsResult.ok ? (reportsResult.reports || []) : [];
+    const lastReport = reports[0] || null;
     const diagnostics = stats.signingDiagnostics || {};
     const variables = diagnostics.variables || {};
     const certificates = diagnostics.certificates || {};
@@ -1369,6 +1380,14 @@
           ${firstWallet ? `<a class="btn btn-ghost btn-sm" href="${_escapeHTML(firstWallet.downloadUrl || `/api/wallet/download/${encodeURIComponent(firstWallet.serialNumber)}`)}">Download Latest .pkpass</a>` : ""}
         </div>
         <div class="form-feedback ${flash ? (isError ? "error" : "success") : ""}" id="wallet-admin-feedback" aria-live="polite">${_escapeHTML(flash)}</div>
+        ${errorMeta && (errorMeta.code || errorMeta.reportId) ? `
+          <div class="wallet-error-ref">
+            ${errorMeta.code ? `<div>Error code: <code>${_escapeHTML(errorMeta.code)}</code></div>` : ""}
+            ${errorMeta.reportId ? `<div>Report ID: <code>${_escapeHTML(errorMeta.reportId)}</code></div>` : ""}
+            <button class="btn btn-ghost btn-sm" data-wallet-copy-ref
+              data-code="${_escapeHTML(errorMeta.code || "")}"
+              data-report="${_escapeHTML(errorMeta.reportId || "")}">Copy diagnostic reference</button>
+          </div>` : ""}
       </div>
       <div class="pt-panel">
         <div class="pt-panel-head">
@@ -1383,6 +1402,43 @@
             </div>
           `).join("")}
         </div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head">
+          <h3>Apple Wallet Diagnostics</h3>
+          <span class="dim">${lastReport ? _escapeHTML(_walletStatusLabel(lastReport.status)) : "no reports yet"}</span>
+        </div>
+        <div class="wallet-admin-actions">
+          <button class="btn btn-gold btn-sm" data-wallet-run-diagnostics>Run Diagnostics</button>
+        </div>
+        <div class="form-feedback" id="wallet-diagnostics-feedback" aria-live="polite"></div>
+        ${lastReport ? `
+          <div class="wallet-setup-grid">
+            <div class="wallet-setup-item"><span><b>Last report</b><small>${_escapeHTML(lastReport.reportId || "")}</small></span>
+              <span class="status-badge ${_walletStatusBadge(lastReport.status)}">${_escapeHTML((lastReport.status || "").toUpperCase())}</span></div>
+            <div class="wallet-setup-item"><span><b>Primary code</b><small>${_escapeHTML(lastReport.primaryCode || "none")}</small></span>
+              <span class="dim">${_escapeHTML(lastReport.stage || "")}</span></div>
+          </div>` : ""}
+        <div class="table-wrap" style="margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>When</th><th>Status</th><th>Error code</th><th>Stage</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${reports.length ? reports.map(r => `
+                <tr>
+                  <td class="dim">${_escapeHTML(String(r.generatedAt || "").slice(0, 19).replace("T", " "))}</td>
+                  <td><span class="status-badge ${_walletStatusBadge(r.status)}">${_escapeHTML((r.status || "").toUpperCase())}</span></td>
+                  <td><span class="dim">${_escapeHTML(r.primaryCode || "—")}</span></td>
+                  <td class="dim">${_escapeHTML(r.stage || "—")}</td>
+                  <td class="wallet-report-actions">
+                    <button class="btn btn-ghost btn-sm" data-wallet-view-report="${_escapeHTML(r.reportId || "")}">View</button>
+                    <button class="btn btn-ghost btn-sm" data-wallet-copy-report="${_escapeHTML(r.reportId || "")}">Copy</button>
+                    <button class="btn btn-ghost btn-sm" data-wallet-download-report="${_escapeHTML(r.reportId || "")}">Download JSON</button>
+                  </td>
+                </tr>`).join("") : `<tr><td colspan="5"><div class="pt-empty">No diagnostic reports yet.</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+        <pre class="wallet-report-view" id="wallet-report-view" hidden></pre>
       </div>
       <div class="pt-panel">
         <div class="pt-panel-head">
@@ -1424,7 +1480,11 @@
         </div>
       </div>`;
 
-    const show = (response, successText) => renderAdminWallet(response.ok ? successText : response.error, !response.ok);
+    const show = (response, successText) => renderAdminWallet(
+      response.ok ? successText : response.error,
+      !response.ok,
+      response.ok ? null : { code: response.code || "", reportId: response.reportId || "", stage: response.stage || "" },
+    );
     el.querySelector("[data-wallet-test]")?.addEventListener("click", async () => show(await UK_USERS.generateTestWallet(), "Test Wallet pass downloaded."));
     el.querySelector("[data-wallet-update]")?.addEventListener("click", async () => {
       if (firstWallet) show(await UK_USERS.updateWallet(firstWallet.serialNumber), "Wallet metadata refreshed.");
@@ -1432,10 +1492,88 @@
     el.querySelector("[data-wallet-visit]")?.addEventListener("click", async () => {
       if (firstWallet) show(await UK_USERS.simulateWalletVisit(firstWallet.serialNumber), "Visit simulated.");
     });
+
+    el.querySelector("[data-wallet-copy-ref]")?.addEventListener("click", (event) => {
+      const btn = event.currentTarget;
+      const text = `Apple Wallet pass could not be generated.\nError code: ${btn.dataset.code || "unknown"}\nReport ID: ${btn.dataset.report || "n/a"}`;
+      _copyToClipboard(text, btn);
+    });
+
+    el.querySelector("[data-wallet-run-diagnostics]")?.addEventListener("click", async () => {
+      const fb = $("#wallet-diagnostics-feedback");
+      if (fb) { fb.textContent = "Running diagnostics..."; fb.className = "form-feedback"; }
+      const res = await UK_USERS.runWalletDiagnostics();
+      if (!res.ok) {
+        if (fb) { fb.textContent = res.error || "Diagnostics failed."; fb.className = "form-feedback error"; }
+        return;
+      }
+      const status = res.report ? res.report.status : "unknown";
+      renderAdminWallet(`Diagnostics complete: ${status.toUpperCase()} (${res.report?.primaryCode || "no errors"})`, status === "failed");
+    });
+
+    el.querySelectorAll("[data-wallet-view-report]").forEach(btn => btn.addEventListener("click", async () => {
+      const out = $("#wallet-report-view");
+      if (!out) return;
+      const res = await UK_USERS.getWalletReport(btn.dataset.walletViewReport);
+      if (!res.ok || !res.report) { out.hidden = false; out.textContent = "Report not found."; return; }
+      out.hidden = false;
+      out.textContent = JSON.stringify(res.report, null, 2);
+    }));
+    el.querySelectorAll("[data-wallet-copy-report]").forEach(btn => btn.addEventListener("click", async () => {
+      const res = await UK_USERS.getWalletReport(btn.dataset.walletCopyReport);
+      if (res.ok && res.report) _copyToClipboard(JSON.stringify(res.report, null, 2), btn);
+    }));
+    el.querySelectorAll("[data-wallet-download-report]").forEach(btn => btn.addEventListener("click", async () => {
+      const reportId = btn.dataset.walletDownloadReport;
+      const res = await UK_USERS.getWalletReport(reportId);
+      if (!res.ok || !res.report) return;
+      const blob = new Blob([JSON.stringify(res.report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${reportId || "wallet-report"}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }));
+
     const feedback = $("#wallet-admin-feedback");
     if (!result.ok && feedback) {
       feedback.textContent = result.error;
       feedback.className = "form-feedback error";
+    }
+  }
+
+  function _walletStatusLabel(status) {
+    if (status === "healthy") return "healthy";
+    if (status === "warning") return "warning";
+    if (status === "failed") return "failed";
+    return status || "unknown";
+  }
+
+  function _walletStatusBadge(status) {
+    if (status === "healthy") return "confirmed";
+    if (status === "warning") return "pending";
+    return "cancelled";
+  }
+
+  async function _copyToClipboard(text, btn) {
+    const label = btn ? btn.textContent : "";
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      if (btn) { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = label; }, 1500); }
+    } catch (_) {
+      if (btn) { btn.textContent = "Copy failed"; setTimeout(() => { btn.textContent = label; }, 1500); }
     }
   }
 

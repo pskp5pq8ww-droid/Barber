@@ -4,6 +4,54 @@ const fsp = require("fs/promises");
 const { walletConfig, missingSigningConfig, signingDiagnostics } = require("./config");
 const { appendHistory, passExists, readJson, safeSegment, walletPaths, writeJson } = require("./storage");
 const { buildSignedPass } = require("./passkit");
+const {
+  getWalletConfigurationDiagnostics,
+  writeWalletReport,
+  listWalletReports,
+  readWalletReport,
+  sanitizeReportForClient,
+  newReportId,
+  newRequestId,
+} = require("./diagnostics");
+const { WALLET_CODES } = require("./errors");
+
+/**
+ * Build a failed diagnostics report from a signing error and persist it.
+ * The report carries the specific code/stage of the failure plus the full
+ * environment + path + crypto checks, with a sanitised server-side stack.
+ * Returns the persisted (sanitised) report.
+ */
+async function reportSigningFailure(config, err, meta = {}) {
+  const reportId = meta.reportId || newReportId();
+  const requestId = meta.requestId || newRequestId();
+  const report = getWalletConfigurationDiagnostics(config, { reportId, requestId, endpoint: meta.endpoint });
+
+  const code = err && err.code ? err.code : WALLET_CODES.UNKNOWN;
+  const stage = err && err.stage ? err.stage : report.stage;
+  const userMessage = err && err.userMessage ? err.userMessage : (err && err.message) || "Apple Wallet signing failed.";
+
+  // Make sure the actual thrown failure is represented as the primary error.
+  if (!report.errors.some(e => e.code === code)) {
+    report.errors.unshift({
+      code,
+      stage,
+      severity: "error",
+      message: userMessage,
+      safeDetails: (err && err.safeDetails) || {},
+    });
+  }
+  report.status = "failed";
+  report.primaryCode = code;
+  report.stage = stage;
+
+  await writeWalletReport(config, report, {
+    code,
+    stage,
+    technicalMessage: err && err.message,
+    stack: err && err.stack,
+  });
+  return sanitizeReportForClient(report);
+}
 
 function walletCustomerIdFromBooking(booking) {
   if (booking.id) return `booking-${safeSegment(booking.id)}`;
@@ -82,24 +130,42 @@ async function saveMetadata(config, metadata) {
   return metadata;
 }
 
-async function tryBuildPass(config, metadata) {
+async function tryBuildPass(config, metadata, meta = {}) {
   const paths = walletPaths(config, metadata.customerId);
   try {
     await buildSignedPass(config, metadata, paths.pass);
     metadata.passStatus = "signed";
     metadata.passError = "";
+    metadata.passErrorCode = "";
+    metadata.passErrorStage = "";
+    metadata.passReportId = "";
     await appendHistory(config, metadata.customerId, {
       action: "pass.generated",
       serialNumber: metadata.serialNumber,
     });
   } catch (err) {
+    // Produce a durable, secret-free diagnostic report we can recover later.
+    let report = null;
+    try {
+      report = await reportSigningFailure(config, err, {
+        endpoint: meta.endpoint || "pass.build",
+        requestId: meta.requestId,
+      });
+    } catch (reportErr) {
+      console.error("[wallet] failed to build diagnostic report", reportErr && reportErr.message);
+    }
     metadata.passStatus = "metadata-only";
-    metadata.passError = err.message;
+    metadata.passError = (err && err.userMessage) || (err && err.message) || "Apple Wallet signing failed.";
+    metadata.passErrorCode = (err && err.code) || WALLET_CODES.UNKNOWN;
+    metadata.passErrorStage = (err && err.stage) || "";
+    metadata.passReportId = report ? report.reportId : "";
     await appendHistory(config, metadata.customerId, {
       action: "pass.pending-signing",
       serialNumber: metadata.serialNumber,
-      error: err.message,
-      code: err.code || "",
+      error: metadata.passError,
+      code: metadata.passErrorCode,
+      stage: metadata.passErrorStage,
+      reportId: metadata.passReportId,
     });
   }
   await saveMetadata(config, metadata);
@@ -286,16 +352,43 @@ async function walletStats({ rootDir, storageRoot }) {
 
 async function downloadablePass({ rootDir, storageRoot, serialNumber }) {
   const found = await findWalletBySerial({ rootDir, storageRoot, serialNumber: safeSegment(serialNumber) });
-  if (!found) return { ok: false, status: 404, error: "Wallet not found." };
+  if (!found) return { ok: false, status: 404, error: "Wallet not found.", code: "WALLET_NOT_FOUND" };
   if (!(await passExists(found.config, found.metadata.customerId))) {
     return {
       ok: false,
       status: 409,
       error: found.metadata.passError || "Signed .pkpass is not available yet.",
+      code: found.metadata.passErrorCode || "PKPASS_NOT_SIGNED",
+      stage: found.metadata.passErrorStage || "",
+      reportId: found.metadata.passReportId || "",
       metadata: safeMetadata(found.metadata),
     };
   }
   return { ok: true, metadata: found.metadata, path: found.paths.pass };
+}
+
+/**
+ * Run wallet configuration diagnostics on demand and persist the report.
+ * Returns the sanitised report (no secrets, no server stack).
+ */
+async function runWalletDiagnostics({ rootDir, storageRoot, meta = {} }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  const report = getWalletConfigurationDiagnostics(config, {
+    endpoint: meta.endpoint || "/api/admin/wallet/diagnostics",
+    requestId: meta.requestId,
+  });
+  await writeWalletReport(config, report, {});
+  return sanitizeReportForClient(report);
+}
+
+async function walletReportHistory({ rootDir, storageRoot, limit = 50 }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  return listWalletReports(config, { limit });
+}
+
+async function walletReportById({ rootDir, storageRoot, reportId }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  return readWalletReport(config, reportId);
 }
 
 module.exports = {
@@ -304,9 +397,12 @@ module.exports = {
   findWalletBySerial,
   findWalletForBooking,
   generateTestWallet,
+  runWalletDiagnostics,
   simulateVisit,
   updateWalletForBookingStatus,
   walletConfig,
+  walletReportById,
+  walletReportHistory,
   walletStats,
   walletCustomerIdFromBooking,
 };

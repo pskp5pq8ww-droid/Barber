@@ -328,6 +328,98 @@ curl -X POST http://localhost:8123/api/wallet/generate \
   --data '{"bookingId":"bk001"}'
 ```
 
+## Diagnostics & Error Reporting (added 2026-06-13)
+
+The signing pipeline no longer collapses every failure into a single
+"WWDR certificate is not readable" message. Each failure now carries a
+specific machine code, the pipeline stage where it happened, and a durable,
+secret-free JSON report that can be recovered later.
+
+### Modules
+
+- `src/lib/wallet/errors.js` — `WalletConfigurationError` (code, stage,
+  safeDetails, userMessage, `cause`) + all error-code/stage constants.
+- `src/lib/wallet/diagnostics.js` — `getWalletConfigurationDiagnostics(config)`
+  runs the full checklist (env presence, path normalisation, exists/readable/
+  size/owner/mode, empty + HTML + PEM/DER detection, X.509 parsing, cert↔key
+  match, WWDR chain verification, Pass Type ID / Team ID comparison) and returns
+  one structured report. Also `writeWalletReport`, `listWalletReports`,
+  `readWalletReport` (sanitised — no secrets, no server stack).
+- `src/lib/wallet/config.js` — `normalizeConfiguredPath` trims, strips wrapping
+  quotes and zero-width/control characters (interior spaces preserved), and
+  `readSecretSource(value, root, kind)` throws *specific* codes.
+- `src/lib/wallet/passkit.js` — staged signing: read → parse → compare cert/key
+  → verify chain → build pass.json → manifest → sign → **verify the .pkpass**
+  (binary PKZip containing `pass.json`, `manifest.json`, `signature`,
+  `icon.png`, `icon@2x.png`) before it is written.
+
+### Error codes
+
+```
+WWDR_ENV_NOT_CONFIGURED  WWDR_PATH_INVALID  WWDR_FILE_NOT_FOUND
+WWDR_FILE_NOT_READABLE   WWDR_FILE_EMPTY    WWDR_FORMAT_INVALID
+WWDR_PARSE_FAILED        WWDR_ISSUER_MISMATCH
+
+PASS_CERT_ENV_NOT_CONFIGURED  PASS_CERT_FILE_NOT_FOUND
+PASS_CERT_FILE_NOT_READABLE   PASS_CERT_FORMAT_INVALID
+PASS_CERT_PARSE_FAILED        PASS_CERT_TYPE_ID_MISMATCH
+PASS_CERT_TEAM_ID_MISMATCH    PASS_CERT_EXPIRED  PASS_CERT_NOT_YET_VALID
+
+PRIVATE_KEY_ENV_NOT_CONFIGURED  PRIVATE_KEY_FILE_NOT_FOUND
+PRIVATE_KEY_FILE_NOT_READABLE   PRIVATE_KEY_FORMAT_INVALID
+PRIVATE_KEY_PARSE_FAILED        PRIVATE_KEY_PASSWORD_REQUIRED
+CERTIFICATE_PRIVATE_KEY_MISMATCH
+```
+
+### Admin endpoints (require an admin session)
+
+```http
+GET /api/admin/wallet/diagnostics                 # run + persist + return report
+GET /api/admin/wallet/diagnostics/reports?limit=N # report history
+GET /api/admin/wallet/diagnostics/reports/{id}    # one report (sanitised)
+```
+
+`GET /api/debug/apple-wallet` stays public but only returns booleans + resolved
+paths (never file contents).
+
+### Where reports are stored
+
+```
+{STORAGE_ROOT}/logs/apple-wallet/wallet-report-YYYY-MM-DD-HH-mm-ss-<requestId>.json
+```
+
+Override with `APPLE_WALLET_LOG_PATH`. The folder is auto-pruned to the latest
+100 reports. If the folder is not writable, a safe console fallback is logged
+with the same `reportId`. Reports never contain the private key, full PEM
+bodies, passwords, tokens, cookies or auth headers — only public certificate
+metadata (subject/issuer/dates/fingerprint), file paths, sizes/permissions and
+booleans, plus a server-only sanitised stack that is stripped before any HTTP
+response.
+
+### Admin UI
+
+The admin `Apple Wallet` page has an **Apple Wallet Diagnostics** panel:
+`Run Diagnostics`, current status, last report, and a history table with
+`View` / `Copy` / `Download JSON`. When a generate button fails, the UI shows
+`Error code:` + `Report ID:` and a `Copy diagnostic reference` button.
+
+### WWDR certificate
+
+`APPLE_WALLET_WWDR_CERT_PATH` must point at the **Apple WWDR G4 intermediate**
+(`AppleWWDRCAG4.pem`), subject `CN=Apple Worldwide Developer Relations
+Certification Authority, OU=G4`. The diagnostics verify it actually signs the
+Pass Type ID certificate; if not, you get `WWDR_ISSUER_MISMATCH` instead of a
+guess. Download it from https://www.apple.com/certificateauthority/ and convert
+with `openssl x509 -inform der -in AppleWWDRCAG4.cer -out AppleWWDRCAG4.pem`.
+
+### Important: Pass Type ID must match the certificate
+
+`APPLE_WALLET_PASS_TYPE_ID` must equal the `UID`/`Pass Type ID` inside
+`apple-wallet-pass.pem`. A mismatch produces `PASS_CERT_TYPE_ID_MISMATCH`: the
+pass would sign but Apple Wallet rejects it. Either set the env var to the
+certificate's real identifier or re-issue the certificate for the desired
+identifier in the Apple Developer portal.
+
 ## What Remains for Real Apple Wallet Push
 
 - Add valid Apple Pass Type ID.

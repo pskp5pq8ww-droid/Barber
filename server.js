@@ -686,6 +686,49 @@ function storageStatus() {
   };
 }
 
+const APPLE_WALLET_DEBUG_ENV_KEYS = [
+  "APPLE_WALLET_TEAM_ID",
+  "APPLE_WALLET_PASS_TYPE_ID",
+  "APPLE_WALLET_CERT_PATH",
+  "APPLE_WALLET_KEY_PATH",
+  "APPLE_WALLET_WWDR_CERT_PATH",
+  "APPLE_WALLET_BASE_URL",
+];
+
+const APPLE_WALLET_CERT_PATH_KEYS = [
+  "APPLE_WALLET_CERT_PATH",
+  "APPLE_WALLET_KEY_PATH",
+  "APPLE_WALLET_WWDR_CERT_PATH",
+];
+
+function envKeyExists(key) {
+  return Object.prototype.hasOwnProperty.call(process.env, key);
+}
+
+function resolveDebugFilePath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.includes("-----BEGIN")) return "";
+  return path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(ROOT, raw);
+}
+
+function appleWalletDebugStatus() {
+  const env = Object.fromEntries(
+    APPLE_WALLET_DEBUG_ENV_KEYS.map(key => [key, envKeyExists(key)])
+  );
+  const certificateFiles = Object.fromEntries(
+    APPLE_WALLET_CERT_PATH_KEYS.map(key => {
+      const resolvedPath = resolveDebugFilePath(process.env[key]);
+      return [key, {
+        envExists: envKeyExists(key),
+        resolvedPath,
+        fileExists: resolvedPath ? fs.existsSync(resolvedPath) : false,
+      }];
+    })
+  );
+  return { env, certificateFiles };
+}
+
 function sendPkPass(res, filePath, serialNumber, fileName = "") {
   fs.readFile(filePath, (err, data) => {
     if (err) return jsonError(res, 404, "PKPASS_NOT_FOUND", "Pass file not found.");
@@ -700,6 +743,21 @@ function sendPkPass(res, filePath, serialNumber, fileName = "") {
 
 function jsonError(res, status, code, message, headers = {}) {
   return json(res, status, { ok: false, success: false, code, message, error: message }, headers);
+}
+
+// Wallet generation errors carry a machine code + a recoverable diagnostic
+// reportId. The stack trace is never sent to the browser.
+function walletPassError(res, status, { code, message, reportId = "", stage = "" }) {
+  return json(res, status || 400, {
+    ok: false,
+    success: false,
+    code,
+    message,
+    error: message,
+    reportId: reportId || undefined,
+    stage: stage || undefined,
+    errorDetails: { code, message, reportId: reportId || undefined, stage: stage || undefined },
+  });
 }
 
 function logAuthDebug(req, sessionState, code) {
@@ -949,6 +1007,10 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, storageRoot: STORAGE_ROOT });
   }
 
+  if (method === "GET" && pathName === "/api/debug/apple-wallet") {
+    return json(res, 200, { ok: true, ...appleWalletDebugStatus() });
+  }
+
   if (method === "GET" && pathName === "/api/bootstrap") {
     return json(res, 200, { ok: true, data: visibleStore(store, session) });
   }
@@ -957,6 +1019,32 @@ async function handleApi(req, res, url) {
     if (!requireRole(req, res, sessionState, "admin")) return;
     const stats = await walletService.walletStats({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
     return json(res, 200, { ok: true, stats, storage: storageStatus(), wallets: (store.wallets || []).map(adminWallet) });
+  }
+
+  if (method === "GET" && pathName === "/api/admin/wallet/diagnostics") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const report = await walletService.runWalletDiagnostics({
+      rootDir: ROOT,
+      storageRoot: STORAGE_ROOT,
+      meta: { endpoint: pathName, requestId: req.headers["x-request-id"] },
+    });
+    return json(res, 200, { ok: true, report });
+  }
+
+  if (method === "GET" && pathName === "/api/admin/wallet/diagnostics/reports") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const limit = Math.min(Number(url.searchParams.get("limit") || 50) || 50, 200);
+    const reports = await walletService.walletReportHistory({ rootDir: ROOT, storageRoot: STORAGE_ROOT, limit });
+    return json(res, 200, { ok: true, reports });
+  }
+
+  const walletReportMatch = pathName.match(/^\/api\/admin\/wallet\/diagnostics\/reports\/([^/]+)$/);
+  if (walletReportMatch && method === "GET") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const reportId = decodeURIComponent(walletReportMatch[1]);
+    const report = await walletService.walletReportById({ rootDir: ROOT, storageRoot: STORAGE_ROOT, reportId });
+    if (!report) return jsonError(res, 404, "WALLET_REPORT_NOT_FOUND", "Diagnostic report not found.");
+    return json(res, 200, { ok: true, report });
   }
 
   if (method === "POST" && pathName === "/api/admin/wallet/generate") {
@@ -981,7 +1069,12 @@ async function handleApi(req, res, url) {
 
     const result = await walletService.downloadablePass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber: metadata.serialNumber });
     if (!result.ok) {
-      return jsonError(res, result.status || 400, metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE", result.error || "Signed .pkpass is not available yet.");
+      return walletPassError(res, result.status || 400, {
+        code: result.code || (metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE"),
+        message: result.error || "Signed .pkpass is not available yet.",
+        reportId: result.reportId || metadata.passReportId || "",
+        stage: result.stage || metadata.passErrorStage || "",
+      });
     }
     return sendPkPass(res, result.path, result.metadata.serialNumber, booking ? `${result.metadata.serialNumber}.pkpass` : "urban-kings-test.pkpass");
   }
@@ -1038,11 +1131,18 @@ async function handleApi(req, res, url) {
 
     const result = await walletService.downloadablePass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber: metadata.serialNumber });
     if (!result.ok) {
+      const code = result.code || (metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE");
       console.warn("[wallet] booking pass unavailable", {
         bookingId: booking.id,
-        code: metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE",
+        code,
+        reportId: result.reportId || metadata.passReportId || "",
       });
-      return jsonError(res, result.status || 400, metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE", result.error || "Signed .pkpass is not available yet.");
+      return walletPassError(res, result.status || 400, {
+        code,
+        message: result.error || "Signed .pkpass is not available yet.",
+        reportId: result.reportId || metadata.passReportId || "",
+        stage: result.stage || metadata.passErrorStage || "",
+      });
     }
     return sendPkPass(res, result.path, result.metadata.serialNumber, bookingWalletFileName(booking));
   }

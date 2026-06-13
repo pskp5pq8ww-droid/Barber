@@ -107,6 +107,8 @@ window.UK_USERS = (function () {
         status: response.status,
         code: errorPayload.code || "PKPASS_DOWNLOAD_FAILED",
         error: errorPayload.message || errorPayload.error || "Pass could not be generated.",
+        reportId: errorPayload.reportId || (errorPayload.errorDetails && errorPayload.errorDetails.reportId) || "",
+        stage: errorPayload.stage || (errorPayload.errorDetails && errorPayload.errorDetails.stage) || "",
       };
     }
     const blob = await response.blob();
@@ -482,6 +484,18 @@ window.UK_USERS = (function () {
     return result;
   }
 
+  async function runWalletDiagnostics() {
+    return _api("/api/admin/wallet/diagnostics");
+  }
+
+  async function getWalletReports(limit = 50) {
+    return _api(`/api/admin/wallet/diagnostics/reports?limit=${encodeURIComponent(limit)}`);
+  }
+
+  async function getWalletReport(reportId) {
+    return _api(`/api/admin/wallet/diagnostics/reports/${encodeURIComponent(reportId)}`);
+  }
+
   return {
     init,
     setServerData,
@@ -534,6 +548,9 @@ window.UK_USERS = (function () {
     generateTestWallet,
     updateWallet,
     simulateWalletVisit,
+    runWalletDiagnostics,
+    getWalletReports,
+    getWalletReport,
     DEMO_TODAY: "",
     demoCredentials: {},
   };
