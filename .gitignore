@@ -6,6 +6,9 @@ node_modules/
 .codex/
 .agents/
 *.log
+*.p12
+*.pem
+*.key
 *.bundle
 ham_cfg_support
 skills-lock.json
@@ -13,3 +16,5 @@ deck-stage.js
 Urban Kings Brand Deck.html
 storage/
 private/
+private/wallet/
+certificates/

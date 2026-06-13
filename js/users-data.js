@@ -67,7 +67,7 @@ window.UK_USERS = (function () {
 
   async function _api(path, options = {}) {
     const response = await fetch(path, {
-      credentials: "same-origin",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(options.headers || {}),
@@ -80,6 +80,42 @@ window.UK_USERS = (function () {
       return { ok: false, error: data.error || "Request failed.", status: response.status };
     }
     return data;
+  }
+
+  function _filenameFromDisposition(disposition, fallback) {
+    const match = String(disposition || "").match(/filename="?([^"]+)"?/i);
+    return match ? match[1] : fallback;
+  }
+
+  async function _downloadPkpass(path, payload = {}, fallbackFileName = "urban-kings.pkpass") {
+    const response = await fetch(path, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!response.ok) {
+      const errorPayload = contentType.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : {};
+      return {
+        ok: false,
+        status: response.status,
+        code: errorPayload.code || "PKPASS_DOWNLOAD_FAILED",
+        error: errorPayload.message || errorPayload.error || "Pass could not be generated.",
+      };
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = _filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackFileName);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { ok: true, fileName: anchor.download };
   }
 
   async function init(payload) {
@@ -392,7 +428,7 @@ window.UK_USERS = (function () {
   }
 
   async function getWalletStats() {
-    const result = await _api("/api/wallet/stats");
+    const result = await _api("/api/admin/wallet/stats");
     if (!result.ok) return result;
     state.wallets = result.wallets || state.wallets;
     return result;
@@ -406,21 +442,21 @@ window.UK_USERS = (function () {
   }
 
   async function generateTestWallet() {
-    const result = await _api("/api/wallet/test", { method: "POST", body: {} });
+    const result = await _downloadPkpass("/api/admin/wallet/generate", {}, "urban-kings-test.pkpass");
     if (!result.ok) return result;
-    if (result.wallet) _replace("wallets", result.wallet);
+    await getWalletStats();
     return result;
   }
 
   async function updateWallet(serialNumber) {
-    const result = await _api(`/api/wallet/${encodeURIComponent(serialNumber)}/update`, { method: "POST", body: {} });
+    const result = await _api(`/api/admin/wallet/${encodeURIComponent(serialNumber)}/update`, { method: "POST", body: {} });
     if (!result.ok) return result;
     if (result.wallet) _replace("wallets", result.wallet);
     return result;
   }
 
   async function simulateWalletVisit(serialNumber) {
-    const result = await _api(`/api/wallet/${encodeURIComponent(serialNumber)}/simulate-visit`, { method: "POST", body: {} });
+    const result = await _api(`/api/admin/wallet/${encodeURIComponent(serialNumber)}/simulate-visit`, { method: "POST", body: {} });
     if (!result.ok) return result;
     if (result.wallet) _replace("wallets", result.wallet);
     return result;

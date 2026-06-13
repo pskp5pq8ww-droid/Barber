@@ -185,3 +185,21 @@
   flex-wrap: wrap;
   gap: 10px;
 }
+.wallet-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.wallet-setup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.025);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.84rem;
+}

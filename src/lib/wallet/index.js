@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const fsp = require("fs/promises");
 
-const { walletConfig, missingSigningConfig } = require("./config");
+const { walletConfig, missingSigningConfig, signingDiagnostics } = require("./config");
 const { appendHistory, passExists, readJson, safeSegment, walletPaths, writeJson } = require("./storage");
 const { buildSignedPass } = require("./passkit");
 
@@ -228,14 +228,20 @@ async function walletStats({ rootDir, storageRoot }) {
     passStatus: wallet.passStatus,
     passError: wallet.passError,
   });
+  const diagnostics = signingDiagnostics(config, rootDir);
+  const certsReady = diagnostics.certificates.passCertificate.readable
+    && diagnostics.certificates.privateKey.readable
+    && diagnostics.certificates.wwdrCertificate.readable;
+  const missing = missingSigningConfig(config);
   return {
     totalWalletMembers: wallets.length,
     walletsGenerated: wallets.filter(w => w.passStatus === "signed").length,
     metadataOnly: wallets.filter(w => w.passStatus !== "signed").length,
     activeRewards: wallets.filter(w => String(w.reward || "").toLowerCase().includes("available")).length,
     lastUpdates: wallets.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 6).map(safeWallet),
-    signingReady: missingSigningConfig(config).length === 0,
-    missingSigningConfig: missingSigningConfig(config),
+    signingReady: missing.length === 0 && certsReady,
+    missingSigningConfig: missing,
+    signingDiagnostics: diagnostics,
   };
 }
 

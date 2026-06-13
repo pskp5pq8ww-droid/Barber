@@ -1,7 +1,7 @@
 const fsp = require("fs/promises");
 const path = require("path");
 
-const { missingSigningConfig } = require("./config");
+const { missingSigningConfig, readSecretSource } = require("./config");
 
 async function optionalPassKit() {
   try {
@@ -19,7 +19,7 @@ function passJson(config, metadata) {
     serialNumber: metadata.serialNumber,
     teamIdentifier: config.teamIdentifier,
     organizationName: config.organizationName,
-    description: "Urban Kings Membership",
+    description: "Barber Appointment",
     logoText: "Urban Kings",
     foregroundColor: "rgb(255,255,255)",
     backgroundColor: "rgb(8,8,8)",
@@ -67,27 +67,43 @@ async function buildSignedPass(config, metadata, outputPath) {
 
   const { PKPass } = passkit;
   const certificates = {
-    wwdr: await fsp.readFile(config.wwdrCertPath),
-    signerCert: await fsp.readFile(config.certPath),
-    signerKey: await fsp.readFile(config.keyPath),
+    wwdr: await readSecretSource(config.wwdrCertPath, config.rootDir),
+    signerCert: await readSecretSource(config.certPath, config.rootDir),
+    signerKey: await readSecretSource(config.keyPath, config.rootDir),
     signerKeyPassphrase: config.certPassword || undefined,
   };
 
-  const pass = new PKPass({}, certificates, passJson(config, metadata));
-  const assets = [
+  const pass = new PKPass({
+    "pass.json": Buffer.from(JSON.stringify(passJson(config, metadata))),
+  }, certificates);
+  const requiredAssets = [
     ["icon.png", "icon.png"],
     ["icon@2x.png", "icon@2x.png"],
     ["logo.png", "logo.png"],
     ["logo@2x.png", "logo@2x.png"],
+  ];
+  const optionalAssets = [
     ["strip.png", "strip.png"],
   ];
 
-  for (const [assetName, passName] of assets) {
+  for (const [assetName, passName] of requiredAssets) {
+    const assetPath = path.join(config.assetsPath, assetName);
+    try {
+      pass.addBuffer(passName, await fsp.readFile(assetPath));
+    } catch (err) {
+      const assetErr = new Error(`Apple Wallet asset is missing or unreadable: ${assetName}`);
+      assetErr.code = "WALLET_ASSET_UNREADABLE";
+      assetErr.cause = err;
+      throw assetErr;
+    }
+  }
+
+  for (const [assetName, passName] of optionalAssets) {
     const assetPath = path.join(config.assetsPath, assetName);
     try {
       pass.addBuffer(passName, await fsp.readFile(assetPath));
     } catch (_) {
-      // Assets are optional during scaffolding. A signed production pass should include them.
+      // Optional visual enrichment only.
     }
   }
 

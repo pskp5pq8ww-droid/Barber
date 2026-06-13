@@ -1326,10 +1326,21 @@
     }).join("");
   }
 
-  async function renderAdminWallet(flash = "") {
+  async function renderAdminWallet(flash = "", isError = false) {
     const el = $("#ap-wallet-inner"); if (!el) return;
     const result = await UK_USERS.getWalletStats();
     const stats = result.ok ? result.stats : {};
+    const diagnostics = stats.signingDiagnostics || {};
+    const variables = diagnostics.variables || {};
+    const certificates = diagnostics.certificates || {};
+    const setupItems = [
+      ["Pass Type ID", variables.APPLE_WALLET_PASS_TYPE_ID],
+      ["Team ID", variables.APPLE_WALLET_TEAM_ID],
+      ["Pass certificate", certificates.passCertificate?.configured && certificates.passCertificate?.readable],
+      ["Private key", certificates.privateKey?.configured && certificates.privateKey?.readable],
+      ["WWDR certificate", certificates.wwdrCertificate?.configured && certificates.wwdrCertificate?.readable],
+      ["Base URL", variables.APPLE_WALLET_BASE_URL],
+    ];
     const wallets = UK_USERS.getAllWallets();
     const firstWallet = wallets[0] || null;
     el.innerHTML = `
@@ -1357,7 +1368,21 @@
           <button class="btn btn-ghost btn-sm" data-wallet-visit ${firstWallet ? "" : "disabled"}>Simulate Visit</button>
           ${firstWallet ? `<a class="btn btn-ghost btn-sm" href="${_escapeHTML(firstWallet.downloadUrl || `/api/wallet/download/${encodeURIComponent(firstWallet.serialNumber)}`)}">Download Latest .pkpass</a>` : ""}
         </div>
-        <div class="form-feedback ${flash ? "success" : ""}" id="wallet-admin-feedback" aria-live="polite">${_escapeHTML(flash)}</div>
+        <div class="form-feedback ${flash ? (isError ? "error" : "success") : ""}" id="wallet-admin-feedback" aria-live="polite">${_escapeHTML(flash)}</div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head">
+          <h3>Signing Setup</h3>
+          <span class="dim">${stats.signingReady ? "ready" : "incomplete"}</span>
+        </div>
+        <div class="wallet-setup-grid">
+          ${setupItems.map(([label, ready]) => `
+            <div class="wallet-setup-item">
+              <span>${_escapeHTML(label)}</span>
+              <span class="status-badge ${ready ? "confirmed" : "pending"}">${ready ? "Ready" : "Missing"}</span>
+            </div>
+          `).join("")}
+        </div>
       </div>
       <div class="pt-panel">
         <div class="pt-panel-head"><h3>Wallet Members</h3><span class="dim">${wallets.length} records</span></div>
@@ -1381,8 +1406,8 @@
         </div>
       </div>`;
 
-    const show = (response, successText) => renderAdminWallet(response.ok ? successText : response.error);
-    el.querySelector("[data-wallet-test]")?.addEventListener("click", async () => show(await UK_USERS.generateTestWallet(), "Test Wallet metadata generated."));
+    const show = (response, successText) => renderAdminWallet(response.ok ? successText : response.error, !response.ok);
+    el.querySelector("[data-wallet-test]")?.addEventListener("click", async () => show(await UK_USERS.generateTestWallet(), "Test Wallet pass downloaded."));
     el.querySelector("[data-wallet-update]")?.addEventListener("click", async () => {
       if (firstWallet) show(await UK_USERS.updateWallet(firstWallet.serialNumber), "Wallet metadata refreshed.");
     });
