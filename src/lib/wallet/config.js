@@ -117,17 +117,22 @@ function signingDiagnostics(config, rootDir) {
   };
 }
 
-async function readSecretSource(value, rootDir) {
+async function readSecretSource(value, rootDir, label = "signing source") {
   const status = resolveSecretSource(value, rootDir);
   if (!status.configured) {
-    const err = new Error("Apple Wallet signing source is not configured.");
+    const err = new Error(`Apple Wallet ${label} is not configured.`);
     err.code = "WALLET_SIGNING_SOURCE_MISSING";
+    err.sourceLabel = label;
     throw err;
   }
   if (status.content) return status.content;
   if (!status.resolvedPath || !status.readable) {
-    const err = new Error("Apple Wallet signing source is not readable.");
+    const err = new Error(`Apple Wallet ${label} is not readable.`);
     err.code = "WALLET_SIGNING_SOURCE_UNREADABLE";
+    err.sourceLabel = label;
+    err.sourceType = status.sourceType;
+    err.exists = status.exists;
+    err.readable = status.readable;
     throw err;
   }
   return fs.promises.readFile(status.resolvedPath);

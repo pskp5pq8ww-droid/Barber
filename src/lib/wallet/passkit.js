@@ -67,9 +67,9 @@ async function buildSignedPass(config, metadata, outputPath) {
 
   const { PKPass } = passkit;
   const certificates = {
-    wwdr: await readSecretSource(config.wwdrCertPath, config.rootDir),
-    signerCert: await readSecretSource(config.certPath, config.rootDir),
-    signerKey: await readSecretSource(config.keyPath, config.rootDir),
+    wwdr: await readSecretSource(config.wwdrCertPath, config.rootDir, "WWDR certificate"),
+    signerCert: await readSecretSource(config.certPath, config.rootDir, "pass certificate"),
+    signerKey: await readSecretSource(config.keyPath, config.rootDir, "private key"),
     signerKeyPassphrase: config.certPassword || undefined,
   };
 
