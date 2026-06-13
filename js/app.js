@@ -1342,6 +1342,7 @@
       ["Base URL", variables.APPLE_WALLET_BASE_URL],
     ];
     const wallets = UK_USERS.getAllWallets();
+    const storage = result.storage || UK_USERS.getStorageStatus();
     const firstWallet = wallets[0] || null;
     el.innerHTML = `
       <div class="portal-page-head">
@@ -1380,6 +1381,24 @@
             <div class="wallet-setup-item">
               <span>${_escapeHTML(label)}</span>
               <span class="status-badge ${ready ? "confirmed" : "pending"}">${ready ? "Ready" : "Missing"}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+      <div class="pt-panel">
+        <div class="pt-panel-head">
+          <h3>System Storage</h3>
+          <span class="dim">${_escapeHTML(storage.dataDir || "storage/data")}</span>
+        </div>
+        <div class="wallet-setup-grid">
+          ${[
+            ["Data", storage.data?.exists && storage.data?.writable, storage.dataDir || "storage/data"],
+            ["Backups", storage.backups?.exists && storage.backups?.writable, storage.backupDir || "storage/backups"],
+            ["Uploads", storage.uploads?.exists && storage.uploads?.writable, storage.uploadDir || "storage/uploads"],
+          ].map(([label, ready, location]) => `
+            <div class="wallet-setup-item">
+              <span><b>${_escapeHTML(label)}</b><small>${_escapeHTML(location)}</small></span>
+              <span class="status-badge ${ready ? "confirmed" : "pending"}">${ready ? "Writable" : "Check"}</span>
             </div>
           `).join("")}
         </div>

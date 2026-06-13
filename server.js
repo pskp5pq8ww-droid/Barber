@@ -7,12 +7,37 @@ const walletService = require("./src/lib/wallet");
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8123;
-let STORAGE_ROOT = process.env.UK_STORAGE_DIR || "/storage/cd";
-let DATA_DIR = path.join(STORAGE_ROOT, "data");
-let BACKUP_DIR = path.join(STORAGE_ROOT, "backups");
-let UPLOAD_DIR = path.join(STORAGE_ROOT, "uploads");
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 1024 * 1024;
+
+function resolveStoragePath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return path.isAbsolute(raw) ? raw : path.join(ROOT, raw);
+}
+
+function storagePaths(storageRootInput = "") {
+  const configuredRoot = resolveStoragePath(storageRootInput) || path.join(ROOT, "storage");
+  const explicitDataDir = resolveStoragePath(process.env.UK_DATA_DIR || "");
+  const dataDirFromRootInput = path.basename(configuredRoot) === "data";
+  const storageRoot = explicitDataDir
+    ? path.dirname(explicitDataDir)
+    : dataDirFromRootInput
+      ? path.dirname(configuredRoot)
+      : configuredRoot;
+  const dataDir = explicitDataDir || (dataDirFromRootInput ? configuredRoot : path.join(storageRoot, "data"));
+  return {
+    storageRoot,
+    dataDir,
+    backupDir: path.join(storageRoot, "backups"),
+    uploadDir: path.join(storageRoot, "uploads"),
+  };
+}
+
+let STORAGE_ROOT = "";
+let DATA_DIR = "";
+let BACKUP_DIR = "";
+let UPLOAD_DIR = "";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -47,11 +72,14 @@ const DATA_FILES = {
 let writeQueue = Promise.resolve();
 
 function setStorageRoot(storageRoot) {
-  STORAGE_ROOT = storageRoot;
-  DATA_DIR = path.join(STORAGE_ROOT, "data");
-  BACKUP_DIR = path.join(STORAGE_ROOT, "backups");
-  UPLOAD_DIR = path.join(STORAGE_ROOT, "uploads");
+  const paths = storagePaths(storageRoot);
+  STORAGE_ROOT = paths.storageRoot;
+  DATA_DIR = paths.dataDir;
+  BACKUP_DIR = paths.backupDir;
+  UPLOAD_DIR = paths.uploadDir;
 }
+
+setStorageRoot(process.env.UK_STORAGE_DIR || "");
 
 function now() {
   return new Date().toISOString();
@@ -262,7 +290,7 @@ async function ensureStorage() {
   try {
     await ensureStorageAtCurrentRoot();
   } catch (err) {
-    const fallbackRoot = path.join(ROOT, "storage", "cd");
+    const fallbackRoot = path.join(ROOT, "storage");
     if (STORAGE_ROOT === fallbackRoot) throw err;
     console.warn(`Storage root ${STORAGE_ROOT} is not writable (${err.code || err.message}). Falling back to ${fallbackRoot}.`);
     setStorageRoot(fallbackRoot);
@@ -611,6 +639,43 @@ function upsertWalletIndex(store, metadata) {
   else store.wallets.unshift(publicEntry);
 }
 
+function displayStoragePath(filePath) {
+  const relative = path.relative(ROOT, filePath);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative;
+  return filePath;
+}
+
+function pathAccessStatus(dirPath) {
+  const status = { exists: false, readable: false, writable: false };
+  try {
+    fs.accessSync(dirPath, fs.constants.F_OK);
+    status.exists = true;
+  } catch (_) {
+    return status;
+  }
+  try {
+    fs.accessSync(dirPath, fs.constants.R_OK);
+    status.readable = true;
+  } catch (_) {}
+  try {
+    fs.accessSync(dirPath, fs.constants.W_OK);
+    status.writable = true;
+  } catch (_) {}
+  return status;
+}
+
+function storageStatus() {
+  return {
+    storageRoot: displayStoragePath(STORAGE_ROOT),
+    dataDir: displayStoragePath(DATA_DIR),
+    backupDir: displayStoragePath(BACKUP_DIR),
+    uploadDir: displayStoragePath(UPLOAD_DIR),
+    data: pathAccessStatus(DATA_DIR),
+    backups: pathAccessStatus(BACKUP_DIR),
+    uploads: pathAccessStatus(UPLOAD_DIR),
+  };
+}
+
 function sendPkPass(res, filePath, serialNumber, fileName = "") {
   fs.readFile(filePath, (err, data) => {
     if (err) return jsonError(res, 404, "PKPASS_NOT_FOUND", "Pass file not found.");
@@ -881,7 +946,7 @@ async function handleApi(req, res, url) {
   if (method === "GET" && pathName === "/api/admin/wallet/stats") {
     if (!requireRole(req, res, sessionState, "admin")) return;
     const stats = await walletService.walletStats({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
-    return json(res, 200, { ok: true, stats, wallets: (store.wallets || []).map(adminWallet) });
+    return json(res, 200, { ok: true, stats, storage: storageStatus(), wallets: (store.wallets || []).map(adminWallet) });
   }
 
   if (method === "POST" && pathName === "/api/admin/wallet/generate") {

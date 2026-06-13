@@ -264,7 +264,32 @@ If the pass is signed, the button downloads the `.pkpass`. If signing is not con
 Start server:
 
 ```bash
-UK_STORAGE_DIR="/path/to/project/storage/cd" PORT=8123 node server.js
+PORT=8123 node server.js
+```
+
+By default all persistent app data is stored in:
+
+```text
+storage/data/
+```
+
+That folder contains JSON files for admins, barbers, customers, bookings, payments, sessions, wallets and other app state. Backups and uploads are stored beside it:
+
+```text
+storage/backups/
+storage/uploads/
+```
+
+On Hostinger, either leave `UK_STORAGE_DIR` unset when the app runs from the project folder, or set:
+
+```env
+UK_STORAGE_DIR=storage
+```
+
+If you need to point exactly to a data folder, set:
+
+```env
+UK_DATA_DIR=storage/data
 ```
 
 Create a booking from the public booking flow, then press `Add To Apple Wallet`.

@@ -19,6 +19,7 @@ window.UK_USERS = (function () {
     notifications: [],
     activityLog: [],
     wallets: [],
+    storage: {},
     settings: {},
     loaded: false,
   };
@@ -45,6 +46,7 @@ window.UK_USERS = (function () {
     state.notifications = data.notifications || [];
     state.activityLog = data.activityLog || [];
     state.wallets = data.wallets || [];
+    state.storage = data.storage || state.storage || {};
     state.settings = data.settings || {};
     state.loaded = true;
     return _snapshot();
@@ -61,6 +63,7 @@ window.UK_USERS = (function () {
       notifications: _clone(state.notifications),
       activityLog: _clone(state.activityLog),
       wallets: _clone(state.wallets),
+      storage: _clone(state.storage),
       settings: _clone(state.settings),
     };
   }
@@ -431,7 +434,12 @@ window.UK_USERS = (function () {
     const result = await _api("/api/admin/wallet/stats");
     if (!result.ok) return result;
     state.wallets = result.wallets || state.wallets;
+    state.storage = result.storage || state.storage;
     return result;
+  }
+
+  function getStorageStatus() {
+    return _clone(state.storage || {});
   }
 
   async function generateWalletForBooking(bookingId) {
@@ -509,6 +517,7 @@ window.UK_USERS = (function () {
     hasRosterConflict,
     getAllWallets,
     getWalletStats,
+    getStorageStatus,
     generateWalletForBooking,
     generateTestWallet,
     updateWallet,

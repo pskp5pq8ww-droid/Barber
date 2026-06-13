@@ -203,3 +203,15 @@
   color: var(--text);
   font-size: 0.84rem;
 }
+.wallet-setup-item b,
+.wallet-setup-item small {
+  display: block;
+}
+.wallet-setup-item small {
+  max-width: 100%;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text-mute);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
