@@ -6,6 +6,7 @@ const { appendHistory, passExists, readJson, safeSegment, walletPaths, writeJson
 const { buildSignedPass } = require("./passkit");
 
 function walletCustomerIdFromBooking(booking) {
+  if (booking.id) return `booking-${safeSegment(booking.id)}`;
   if (booking.customerId) return booking.customerId;
   const stable = String(booking.customerEmail || booking.customerPhone || booking.customerName || booking.id || "guest").toLowerCase();
   return `guest-${crypto.createHash("sha256").update(stable).digest("hex").slice(0, 16)}`;
@@ -31,6 +32,12 @@ function customerFromBooking(booking) {
     holderName: booking.customerName || "Urban Kings Member",
     email: booking.customerEmail || "",
     phone: booking.customerPhone || "",
+    bookingId: booking.id || "",
+    serviceName: booking.serviceName || booking.service || "",
+    bookingDate: booking.date || "",
+    bookingTime: booking.time || "",
+    barberName: booking.barberName || "",
+    location: booking.location || "",
     lastBookingId: booking.id || "",
   };
 }
@@ -45,6 +52,12 @@ function defaultMetadata(input, config) {
     holderName: input.holderName || "Urban Kings Member",
     email: input.email || "",
     phone: input.phone || "",
+    bookingId: input.bookingId || "",
+    serviceName: input.serviceName || "",
+    bookingDate: input.bookingDate || "",
+    bookingTime: input.bookingTime || "",
+    barberName: input.barberName || "",
+    location: input.location || config.businessLocation,
     membershipStatus: "active",
     bookingStatus: "pending",
     visits: 0,
@@ -109,6 +122,12 @@ async function ensureWalletForBooking({ rootDir, storageRoot, booking }) {
   metadata.holderName = input.holderName || metadata.holderName;
   metadata.email = input.email || metadata.email;
   metadata.phone = input.phone || metadata.phone;
+  metadata.bookingId = input.bookingId || metadata.bookingId;
+  metadata.serviceName = input.serviceName || metadata.serviceName;
+  metadata.bookingDate = input.bookingDate || metadata.bookingDate;
+  metadata.bookingTime = input.bookingTime || metadata.bookingTime;
+  metadata.barberName = input.barberName || metadata.barberName || "Any available";
+  metadata.location = input.location || metadata.location || config.businessLocation;
   metadata.bookingStatus = booking.status === "confirmed" ? "confirmed" : "pending";
   metadata.lastBookingId = booking.id || metadata.lastBookingId;
 
@@ -131,6 +150,12 @@ async function generateTestWallet({ rootDir, storageRoot }) {
   }
   metadata.membershipStatus = "active";
   metadata.bookingStatus = "pending";
+  metadata.bookingId = "test-booking";
+  metadata.serviceName = "Top Kings";
+  metadata.bookingDate = new Date().toISOString().slice(0, 10);
+  metadata.bookingTime = "10:00";
+  metadata.barberName = "Urban Kings";
+  metadata.location = config.businessLocation;
   metadata.visits = 0;
   metadata.reward = config.rewardText;
   await saveMetadata(config, metadata);
@@ -152,6 +177,12 @@ async function updateWalletForBookingStatus({ rootDir, storageRoot, booking }) {
         ? "cancelled"
         : "pending";
   metadata.lastBookingId = booking.id || metadata.lastBookingId;
+  metadata.bookingId = booking.id || metadata.bookingId;
+  metadata.serviceName = booking.serviceName || booking.service || metadata.serviceName;
+  metadata.bookingDate = booking.date || metadata.bookingDate;
+  metadata.bookingTime = booking.time || metadata.bookingTime;
+  metadata.barberName = booking.barberName || metadata.barberName || "Any available";
+  metadata.location = booking.location || metadata.location || config.businessLocation;
   await appendHistory(config, metadata.customerId, {
     action: "booking.status-updated",
     bookingId: booking.id,
@@ -196,6 +227,14 @@ async function findWalletBySerial({ rootDir, storageRoot, serialNumber }) {
     }
   }
   return null;
+}
+
+async function findWalletForBooking({ rootDir, storageRoot, booking }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  const customerId = booking.walletCustomerId || walletCustomerIdFromBooking(booking);
+  const metadata = await loadMetadata(config, customerId);
+  if (!metadata) return null;
+  return { metadata, paths: walletPaths(config, metadata.customerId), config };
 }
 
 async function walletStats({ rootDir, storageRoot }) {
@@ -263,6 +302,7 @@ module.exports = {
   downloadablePass,
   ensureWalletForBooking,
   findWalletBySerial,
+  findWalletForBooking,
   generateTestWallet,
   simulateVisit,
   updateWalletForBookingStatus,

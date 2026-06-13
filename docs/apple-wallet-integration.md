@@ -43,6 +43,7 @@ APPLE_WALLET_CERT_PASSWORD=certificate_password
 APPLE_WALLET_WWDR_CERT_PATH=/private/wallet/certs/wwdr.pem
 APPLE_WALLET_STORAGE_PATH=/private/wallet/customers
 APPLE_WALLET_BASE_URL=https://your-domain.com
+APPLE_WALLET_BUSINESS_LOCATION=Level 1 / 123 Charlotte St, Brisbane City
 ADMIN_WALLET_KEY=long_random_admin_key
 ```
 
@@ -165,6 +166,22 @@ Response:
     "downloadUrl": "/api/wallet/download/UK-...?token=..."
   }
 }
+```
+
+### Download Booking Pass
+
+```http
+POST /api/wallet/bookings/{bookingId}/pass
+```
+
+Used by the booking confirmation screen. The browser sends the booking id and the existing Wallet token from the created booking; the server loads the real booking from storage and returns the `.pkpass` file.
+
+Response:
+
+```http
+Content-Type: application/vnd.apple.pkpass
+Content-Disposition: attachment; filename="urban-kings-booking.pkpass"
+Cache-Control: no-store
 ```
 
 ### Download Pass

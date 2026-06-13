@@ -13,6 +13,9 @@ async function optionalPassKit() {
 
 function passJson(config, metadata) {
   const baseUrl = config.baseUrl.replace(/\/+$/, "");
+  const bookingStatus = String(metadata.bookingStatus || "pending").toLowerCase() === "confirmed" ? "Confirmed" : "Pending";
+  const bookingCode = metadata.bookingId || metadata.lastBookingId || metadata.serialNumber;
+  const bookingDateTime = [metadata.bookingDate, metadata.bookingTime].filter(Boolean).join(" ");
   return {
     formatVersion: 1,
     passTypeIdentifier: config.passTypeIdentifier,
@@ -27,21 +30,29 @@ function passJson(config, metadata) {
     authenticationToken: metadata.authenticationToken,
     webServiceURL: baseUrl ? `${baseUrl}/api/wallet/v1` : undefined,
     sharingProhibited: false,
+    barcodes: bookingCode ? [{
+      format: "PKBarcodeFormatQR",
+      message: bookingCode,
+      messageEncoding: "iso-8859-1",
+      altText: bookingCode,
+    }] : undefined,
     storeCard: {
       primaryFields: [
-        { key: "holder", label: "Holder", value: metadata.holderName },
+        { key: "service", label: "Service", value: metadata.serviceName || "Urban Kings Booking" },
       ],
       secondaryFields: [
-        { key: "membership", label: "Membership", value: metadata.membershipStatus },
-        { key: "booking", label: "Booking", value: metadata.bookingStatus },
+        { key: "date", label: "Date", value: metadata.bookingDate || "TBC" },
+        { key: "time", label: "Time", value: metadata.bookingTime || "TBC" },
       ],
       auxiliaryFields: [
-        { key: "visits", label: "Visits", value: `${metadata.visits} / ${metadata.visitsGoal}` },
-        { key: "reward", label: "Reward", value: metadata.reward },
+        { key: "barber", label: "Barber", value: metadata.barberName || "Any available" },
+        { key: "status", label: "Status", value: bookingStatus },
       ],
       backFields: [
-        { key: "type", label: "Card Type", value: "Urban Kings Membership" },
-        { key: "memberSince", label: "Member Since", value: metadata.createdAt.slice(0, 10) },
+        { key: "holder", label: "Customer", value: metadata.holderName || "Urban Kings Client" },
+        { key: "bookingId", label: "Booking ID", value: bookingCode },
+        { key: "location", label: "Location", value: metadata.location || config.businessLocation || "Urban Kings" },
+        { key: "dateTime", label: "Appointment", value: bookingDateTime || "Pending confirmation" },
         { key: "phone", label: "Phone", value: metadata.phone || "Not provided" },
         { key: "email", label: "Email", value: metadata.email || "Not provided" },
       ],

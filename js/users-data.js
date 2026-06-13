@@ -443,9 +443,21 @@ window.UK_USERS = (function () {
   }
 
   async function generateWalletForBooking(bookingId) {
-    const result = await _api("/api/wallet/generate", { method: "POST", body: { bookingId } });
+    const booking = state.bookings.find(item => item.id === bookingId) || null;
+    let walletToken = "";
+    try {
+      walletToken = booking?.wallet?.downloadUrl
+        ? new URL(booking.wallet.downloadUrl, window.location.origin).searchParams.get("token") || ""
+        : "";
+    } catch (_) {
+      walletToken = "";
+    }
+    const result = await _downloadPkpass(
+      `/api/wallet/bookings/${encodeURIComponent(bookingId)}/pass`,
+      { walletToken },
+      `urban-kings-booking-${bookingId}.pkpass`
+    );
     if (!result.ok) return result;
-    if (result.wallet) _replace("wallets", result.wallet);
     return result;
   }
 

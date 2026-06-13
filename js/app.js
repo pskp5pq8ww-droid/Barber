@@ -296,16 +296,16 @@
           </div>
           <div class="wallet-membership-card">
             <div>
-              <span class="eyebrow mini">Apple Wallet Membership</span>
-              <h3>Keep your Urban Kings card in Apple Wallet.</h3>
-              <p>Add your Urban Kings membership card to Apple Wallet and receive booking updates, visit tracking and rewards.</p>
+              <span class="eyebrow mini">Apple Wallet Booking</span>
+              <h3>Add this appointment to Apple Wallet.</h3>
+              <p>Download a Wallet pass with your service, date, time, barber and booking code.</p>
               <div class="wallet-meta">
-                <span>${_escapeHTML(booking.wallet?.membershipStatus || "Active")}</span>
-                <span>${_escapeHTML(booking.wallet?.bookingStatus || "Pending Confirmation")}</span>
-                <span>${Number(booking.wallet?.visits || 0)} / ${Number(booking.wallet?.visitsGoal || 5)} visits</span>
+                <span>${_escapeHTML(booking.id || "Booking")}</span>
+                <span>${_escapeHTML(booking.service || booking.serviceName || "Service")}</span>
+                <span>${_escapeHTML(booking.wallet?.bookingStatus || booking.status || "Pending")}</span>
               </div>
             </div>
-            <button class="btn btn-gold" data-wallet-booking="${_escapeHTML(booking.id)}">Add To Apple Wallet</button>
+            <button class="btn btn-gold" data-wallet-booking="${_escapeHTML(booking.id)}">Add Booking to Apple Wallet</button>
             <div class="form-feedback" id="wallet-feedback" aria-live="polite"></div>
           </div>
           <div class="payment-actions">
@@ -322,26 +322,25 @@
       const btn = event.currentTarget;
       const feedback = $("#wallet-feedback");
       btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Generating Wallet Pass...";
       if (feedback) {
-        feedback.textContent = "Preparing your Apple Wallet card...";
+        feedback.textContent = "";
         feedback.className = "form-feedback";
       }
       const result = await UK_USERS.generateWalletForBooking(btn.dataset.walletBooking);
       btn.disabled = false;
+      btn.textContent = originalLabel;
       if (!result.ok) {
         if (feedback) {
-          feedback.textContent = result.error || "Wallet could not be generated.";
+          feedback.textContent = result.error || "We couldn't generate your Wallet Pass. Please try again.";
           feedback.className = "form-feedback error";
         }
         return;
       }
-      if (result.wallet && result.wallet.passStatus === "signed" && result.wallet.downloadUrl) {
-        location.href = result.wallet.downloadUrl;
-        return;
-      }
       if (feedback) {
-        feedback.textContent = result.wallet?.passError || "Wallet membership saved. Apple signing certificates are required before .pkpass download is available.";
-        feedback.className = "form-feedback error";
+        feedback.textContent = "Wallet Pass downloaded.";
+        feedback.className = "form-feedback success";
       }
     });
     host.querySelector("[data-new-booking]")?.addEventListener("click", () => {

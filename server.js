@@ -600,6 +600,12 @@ function publicWallet(metadata) {
     holderName: metadata.holderName,
     membershipStatus: metadata.membershipStatus,
     bookingStatus: metadata.bookingStatus,
+    bookingId: metadata.bookingId,
+    serviceName: metadata.serviceName,
+    bookingDate: metadata.bookingDate,
+    bookingTime: metadata.bookingTime,
+    barberName: metadata.barberName,
+    location: metadata.location,
     visits: metadata.visits,
     visitsGoal: metadata.visitsGoal,
     reward: metadata.reward,
@@ -608,7 +614,7 @@ function publicWallet(metadata) {
     lastBookingId: metadata.lastBookingId,
     passStatus: metadata.passStatus,
     passError: metadata.passError,
-    downloadUrl: walletDownloadUrl(metadata),
+    downloadUrl: metadata.downloadUrl || walletDownloadUrl(metadata),
   };
 }
 
@@ -637,6 +643,10 @@ function upsertWalletIndex(store, metadata) {
   const index = store.wallets.findIndex(item => item.serialNumber === metadata.serialNumber || item.customerId === metadata.customerId);
   if (index >= 0) store.wallets[index] = publicEntry;
   else store.wallets.unshift(publicEntry);
+}
+
+function bookingWalletFileName() {
+  return "urban-kings-booking.pkpass";
 }
 
 function displayStoragePath(filePath) {
@@ -1001,6 +1011,40 @@ async function handleApi(req, res, url) {
     if (!requireRole(req, res, sessionState, "admin")) return;
     const stats = await walletService.walletStats({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
     return json(res, 200, { ok: true, stats, wallets: (store.wallets || []).map(adminWallet) });
+  }
+
+  const bookingWalletPassMatch = pathName.match(/^\/api\/wallet\/bookings\/([^/]+)\/pass$/);
+  if (bookingWalletPassMatch && method === "POST") {
+    const bookingId = decodeURIComponent(bookingWalletPassMatch[1]);
+    const booking = store.bookings.find(item => item.id === bookingId);
+    if (!booking) return jsonError(res, 404, "BOOKING_NOT_FOUND", "Booking not found.");
+    if (!booking.date || !booking.time) {
+      return jsonError(res, 400, "BOOKING_DATE_TIME_REQUIRED", "Booking date and time are required before generating a Wallet Pass.");
+    }
+
+    const existingWallet = await walletService.findWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+    const walletToken = String(body.walletToken || url.searchParams.get("token") || "");
+    const isAdmin = session && session.role === "admin";
+    const isBookingOwner = session && canReadBooking(session, booking);
+    const hasWalletToken = existingWallet && walletToken && walletToken === existingWallet.metadata.authenticationToken;
+    if (!isAdmin && !isBookingOwner && !hasWalletToken) {
+      return jsonError(res, 403, "WALLET_BOOKING_TOKEN_REQUIRED", "A valid booking Wallet token is required.");
+    }
+
+    const metadata = await walletService.ensureWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+    attachWalletToBooking(booking, metadata);
+    upsertWalletIndex(store, metadata);
+    await writeMany({ bookings: store.bookings, wallets: store.wallets }, { backupKeys: ["bookings"] });
+
+    const result = await walletService.downloadablePass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber: metadata.serialNumber });
+    if (!result.ok) {
+      console.warn("[wallet] booking pass unavailable", {
+        bookingId: booking.id,
+        code: metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE",
+      });
+      return jsonError(res, result.status || 400, metadata.passStatus === "metadata-only" ? "PKPASS_NOT_SIGNED" : "PKPASS_UNAVAILABLE", result.error || "Signed .pkpass is not available yet.");
+    }
+    return sendPkPass(res, result.path, result.metadata.serialNumber, bookingWalletFileName(booking));
   }
 
   if (method === "POST" && pathName === "/api/wallet/generate") {

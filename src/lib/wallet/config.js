@@ -26,6 +26,7 @@ function walletConfig({ rootDir, storageRoot }) {
     wwdrCertPath: process.env.APPLE_WALLET_WWDR_CERT_PATH || "",
     storagePath: walletStorageRoot,
     baseUrl: process.env.APPLE_WALLET_BASE_URL || "",
+    businessLocation: process.env.APPLE_WALLET_BUSINESS_LOCATION || "Level 1 / 123 Charlotte St, Brisbane City",
     adminWalletKey: process.env.ADMIN_WALLET_KEY || "",
     assetsPath: path.join(rootDir, "src", "assets", "wallet", "urban-kings"),
     rewardGoal: 5,
