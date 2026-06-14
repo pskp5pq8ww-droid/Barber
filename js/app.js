@@ -274,47 +274,99 @@
 	  }
 
   function _renderBookingConfirmation(booking) {
+    const serviceName = booking.service || booking.serviceName || "Service";
+    const barberName = booking.barber
+      ? booking.barber.displayName || booking.barber.name
+      : booking.barberName || "Any available";
+    const status = booking.wallet?.bookingStatus || booking.status || "pending";
+
     return `
-      <div class="booking-flow-shell">
-        <header class="booking-flow-head">
-          <button class="mini-action" data-route-link="/">Back</button>
-          <div>
-            <div class="eyebrow mini">Urban Kings Booking</div>
-            <h1>Booking request received</h1>
+      <div class="booking-confirmation-shell">
+        <header class="booking-confirmation-head">
+          <button class="confirmation-nav-btn" data-route-link="/" aria-label="Back to home">
+            ${_bookingIcon("chevron-left")}
+            <span>Back</span>
+          </button>
+          <div class="confirmation-brand" aria-label="Urban Kings Barber Experience">
+            <img src="/assets/urban-kings-logo-clean.png" alt="Urban Kings Barber Experience" />
           </div>
-	          <button class="btn btn-ghost btn-sm" data-new-booking>New Booking</button>
+          <button class="confirmation-nav-btn confirmation-new-top" data-new-booking>
+            ${_bookingIcon("calendar")}
+            <span>New Booking</span>
+          </button>
         </header>
-        <section class="booking-step-card">
-          <div class="status-icon success">✓</div>
-          <div class="step-title"><span>Request ${_escapeHTML(booking.id)}</span><h2>We’ll contact you shortly to confirm your appointment.</h2></div>
-          <div class="checkout-summary">
-            <div class="summary-line"><span>Service</span><b>${_escapeHTML(booking.service || booking.serviceName)}</b></div>
-            <div class="summary-line"><span>Date</span><b>${_fmtDate(booking.date)}</b></div>
-            <div class="summary-line"><span>Time</span><b>${_escapeHTML(booking.time)}</b></div>
-            <div class="summary-line"><span>Barber</span><b>${booking.barber ? _escapeHTML(booking.barber.displayName || booking.barber.name) : _escapeHTML(booking.barberName || "Any available")}</b></div>
-            <div class="summary-line"><span>Status</span><b>${_statusBadge(booking.status)}</b></div>
-          </div>
-          <div class="wallet-membership-card">
-            <div>
-              <span class="eyebrow mini">Apple Wallet Booking</span>
-              <h3>Add this appointment to Apple Wallet.</h3>
-              <p>Download a Wallet pass with your service, date, time, barber and booking code.</p>
-              <div class="wallet-meta">
-                <span>${_escapeHTML(booking.id || "Booking")}</span>
-                <span>${_escapeHTML(booking.service || booking.serviceName || "Service")}</span>
-                <span>${_escapeHTML(booking.wallet?.bookingStatus || booking.status || "Pending")}</span>
+
+        <main class="booking-confirmation-grid">
+          <section class="confirmation-hero-panel">
+            <div class="confirmation-success-orb" aria-hidden="true">${_bookingIcon("check")}</div>
+            <h1>Request Received</h1>
+            <p>We’ll contact you shortly to confirm your appointment.</p>
+
+            <div class="wallet-membership-card booking-wallet-card">
+              <div class="booking-wallet-icon" aria-hidden="true">${_bookingIcon("wallet")}</div>
+              <div class="booking-wallet-copy">
+                <span class="confirmation-kicker">Apple Wallet</span>
+                <h2>Keep your appointment in your iPhone Wallet.</h2>
+                <p>Get a reminder and easy access to your booking details.</p>
               </div>
+              <span class="booking-wallet-chevron" aria-hidden="true">${_bookingIcon("chevron-right")}</span>
+              <button class="wallet-badge-button" type="button" data-wallet-booking="${_escapeHTML(booking.id)}" aria-label="Add Booking to Apple Wallet">
+                <img src="/assets/apple-wallet/add-to-apple-wallet.svg" alt="Add to Apple Wallet" loading="lazy" />
+              </button>
+              <div class="form-feedback" id="wallet-feedback" aria-live="polite"></div>
             </div>
-            <button class="wallet-badge-button" type="button" data-wallet-booking="${_escapeHTML(booking.id)}" aria-label="Add Booking to Apple Wallet">
-              <img src="/assets/apple-wallet/add-to-apple-wallet.svg" alt="Add to Apple Wallet" loading="lazy" />
-            </button>
-            <div class="form-feedback" id="wallet-feedback" aria-live="polite"></div>
-          </div>
-          <div class="payment-actions">
-            <button class="btn btn-gold" data-route-link="/">Back to Home</button>
-            <a class="btn btn-ghost" href="https://wa.me/61400000000" target="_blank" rel="noopener">Contact WhatsApp</a>
-          </div>
-        </section>
+
+            <div class="confirmation-code-strip">
+              <span>${_bookingIcon("shield")}</span>
+              <span>Booking Code</span>
+              <b>${_escapeHTML(booking.id || "Pending")}</b>
+              <i aria-hidden="true"></i>
+              <span>Thank you for choosing Urban Kings.</span>
+            </div>
+          </section>
+
+          <section class="confirmation-detail-panel">
+            <article class="confirmation-card booking-pass-card">
+              <span class="confirmation-kicker">Booking Summary</span>
+              <div class="booking-pass-service">
+                <div class="booking-pass-crown" aria-hidden="true">${_bookingIcon("crown")}</div>
+                <div>
+                  <h2>${_escapeHTML(serviceName)}</h2>
+                  <p>Premium Service</p>
+                </div>
+              </div>
+              <div class="booking-pass-grid">
+                ${_bookingSummaryItem("calendar", "Date", _escapeHTML(_fmtBookingDate(booking.date)), _fmtWeekday(booking.date))}
+                ${_bookingSummaryItem("clock", "Time", _escapeHTML(booking.time || "Time pending"), _fmtMeridiemTime(booking.time))}
+                ${_bookingSummaryItem("user", "Barber", _escapeHTML(barberName), "")}
+                ${_bookingSummaryItem("status", "Status", _statusBadge(status), "")}
+              </div>
+            </article>
+
+            <article class="confirmation-card booking-timeline-card">
+              <span class="confirmation-kicker">Booking Status</span>
+              <div class="booking-status-timeline">
+                ${_bookingTimeline(booking).map(step => `
+                  <div class="booking-status-step ${step.state}">
+                    <span class="booking-status-dot" aria-hidden="true">${step.state === "done" || step.state === "active" ? _bookingIcon("check") : ""}</span>
+                    <strong>${_escapeHTML(step.label)}</strong>
+                    <em>${_escapeHTML(step.meta)}</em>
+                  </div>`).join("")}
+              </div>
+            </article>
+
+            <div class="confirmation-actions">
+              <button class="confirmation-action confirmation-action-secondary" data-new-booking>
+                ${_bookingIcon("calendar")}
+                <span>New Booking</span>
+              </button>
+              <button class="confirmation-action confirmation-action-primary" data-route-link="/">
+                ${_bookingIcon("home")}
+                <span>Return Home</span>
+              </button>
+            </div>
+          </section>
+        </main>
       </div>`;
   }
 
@@ -361,7 +413,7 @@
         feedback.className = "form-feedback success";
       }
     });
-    host.querySelector("[data-new-booking]")?.addEventListener("click", () => {
+    host.querySelectorAll("[data-new-booking]").forEach(btn => btn.addEventListener("click", () => {
       _bookingConfirmation = null;
       _bookingStep = 1;
       _bookingDraft = {
@@ -374,7 +426,7 @@
         notes: "",
       };
       renderBooking();
-    });
+    }));
   }
 
   function bindBookingFlowEvents(services) {
@@ -608,6 +660,61 @@
     return `<span class="status-badge ${status}">${STATUS_LABELS[status] || status}</span>`;
   }
 
+  function _bookingIcon(name) {
+    const attrs = `class="booking-ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+    const icons = {
+      "calendar": `<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>`,
+      "check": `<path d="M5 12.5l4.2 4.2L19 7"/>`,
+      "chevron-left": `<path d="M15 18l-6-6 6-6"/>`,
+      "chevron-right": `<path d="M9 18l6-6-6-6"/>`,
+      "clock": `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>`,
+      "crown": `<path d="M3 18h18"/><path d="M5 18l1.4-10 4.2 4L12 5l1.4 7 4.2-4L19 18"/>`,
+      "home": `<path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-6h4v6"/>`,
+      "shield": `<path d="M12 21s7-3.4 7-10V5l-7-3-7 3v6c0 6.6 7 10 7 10z"/><path d="M9 12l2 2 4-5"/>`,
+      "status": `<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-7 7M9 8.5h6.5V15"/>`,
+      "user": `<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c1.2-4 4-6 6.5-6s5.3 2 6.5 6"/>`,
+      "wallet": `<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M7 6V5a2 2 0 0 1 2-2h7v3"/><path d="M16 13h5"/><path d="M17.5 13.1h.01"/>`,
+    };
+    return `<svg ${attrs}>${icons[name] || icons.status}</svg>`;
+  }
+
+  function _bookingSummaryItem(icon, label, value, detail) {
+    return `
+      <div class="booking-pass-item">
+        <span class="booking-pass-item-icon">${_bookingIcon(icon)}</span>
+        <span>${_escapeHTML(label)}</span>
+        <b>${value}</b>
+        ${detail ? `<small>${_escapeHTML(detail)}</small>` : ""}
+      </div>`;
+  }
+
+  function _bookingTimeline(booking) {
+    const status = booking.status || "pending";
+    const isConfirmed = ["confirmed", "in_progress", "completed"].includes(status);
+    const isAppointmentDay = status === "in_progress";
+    const isCompleted = status === "completed";
+    const isCancelled = status === "cancelled";
+
+    return [
+      { label: "Request Received", meta: status === "pending" ? "Just now" : "Received", state: "active" },
+      {
+        label: isConfirmed || isCompleted ? "Appointment Confirmed" : "Confirmation Pending",
+        meta: status === "pending" ? "Soon" : isCancelled ? "Stopped" : "Confirmed",
+        state: isConfirmed || isCompleted ? "done" : isCancelled ? "muted" : "pending",
+      },
+      {
+        label: "Appointment Day",
+        meta: isAppointmentDay ? "Today" : isCompleted ? "Serviced" : "Upcoming",
+        state: isCompleted ? "done" : isAppointmentDay ? "active" : "pending",
+      },
+      {
+        label: isCancelled ? "Cancelled" : "Completed",
+        meta: isCompleted ? "Done" : isCancelled ? "Cancelled" : "After service",
+        state: isCompleted ? "done" : isCancelled ? "cancelled" : "pending",
+      },
+    ];
+  }
+
   function _avChip(av, name, sub) {
     return `<div class="av-chip"><div class="av">${av}</div><div><div class="cell-main">${name}</div>${sub ? `<div class="cell-sub">${sub}</div>` : ""}</div></div>`;
   }
@@ -615,6 +722,30 @@
   function _money(n) { return "$" + n.toLocaleString("en-AU"); }
   function _fmtDate(iso) {
     try { return new Date(iso).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" }); } catch { return iso; }
+  }
+  function _fmtBookingDate(iso) {
+    if (!iso) return "Date pending";
+    try {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return iso;
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${String(date.getDate()).padStart(2, "0")} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    } catch {
+      return iso;
+    }
+  }
+  function _fmtWeekday(iso) {
+    try { return new Date(iso).toLocaleDateString("en-AU", { weekday:"long" }); } catch { return ""; }
+  }
+  function _fmtMeridiemTime(time) {
+    if (!time) return "";
+    try {
+      const [hours = "0", minutes = "0"] = String(time).split(":");
+      const date = new Date(2000, 0, 1, Number(hours), Number(minutes));
+      return date.toLocaleTimeString("en-AU", { hour:"numeric", minute:"2-digit", hour12: true });
+    } catch {
+      return "";
+    }
   }
   function _fmtLongDate(iso) {
     try { return new Date(iso).toLocaleDateString("en-AU", { weekday:"short", day:"2-digit", month:"short", year:"numeric" }); } catch { return iso; }
