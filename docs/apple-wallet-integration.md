@@ -37,8 +37,8 @@ Required before generating a real installable `.pkpass`:
 APPLE_WALLET_PASS_TYPE_ID=pass.com.example.business
 APPLE_WALLET_TEAM_ID=APPLE_TEAM_ID
 APPLE_WALLET_ORG_NAME=Urban Kings
-APPLE_WALLET_CERT_PATH=/private/wallet/certs/urban-kings-wallet-v2.pem
-APPLE_WALLET_KEY_PATH=/private/wallet/certs/urban-kings-wallet-v2.key
+APPLE_WALLET_CERT_PATH=/private/wallet/certs/apple-wallet-pass.pem
+APPLE_WALLET_KEY_PATH=/private/wallet/certs/apple-wallet-pass.key
 APPLE_WALLET_CERT_PASSWORD=certificate_password
 APPLE_WALLET_WWDR_CERT_PATH=/private/wallet/certs/wwdr.pem
 APPLE_WALLET_STORAGE_PATH=/private/wallet/customers
@@ -60,7 +60,7 @@ Do not put certificates in `assets/`, `public/`, `uploads/`, or any web-accessib
 Recommended Hostinger path:
 
 ```text
-/home/{user}/domains/{domain}/private/wallet/certs/
+/home/{user}/storage/cd/wallet/certs/
 ```
 
 Place:
@@ -74,22 +74,38 @@ The module expects readable PEM certificate files. `APPLE_WALLET_CERT_PASSWORD` 
 Expected local files created from Apple Developer:
 
 ```text
-private/wallet/certs/urban-kings-wallet-v2.pem
-private/wallet/certs/urban-kings-wallet-v2.key
+private/wallet/certs/apple-wallet-pass.pem
+private/wallet/certs/apple-wallet-pass.key
 private/wallet/certs/AppleWWDRCAG4.pem
 ```
 
 Recommended local env values:
 
 ```env
-APPLE_WALLET_PASS_TYPE_ID=pass.com.urbankings.wallet.v2
+APPLE_WALLET_PASS_TYPE_ID=pass.com.barber.walllet
 APPLE_WALLET_TEAM_ID=5D9PB994JW
 APPLE_WALLET_ORG_NAME=Urban Kings
-APPLE_WALLET_CERT_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/urban-kings-wallet-v2.pem
-APPLE_WALLET_KEY_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/urban-kings-wallet-v2.key
+APPLE_WALLET_CERT_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/apple-wallet-pass.pem
+APPLE_WALLET_KEY_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/apple-wallet-pass.key
 APPLE_WALLET_WWDR_CERT_PATH=/Users/laikito/Documents/King barber/private/wallet/certs/AppleWWDRCAG4.pem
 APPLE_WALLET_BASE_URL=https://lawngreen-wolverine-255384.hostingersite.com
 ```
+
+Recommended Hostinger env values for the current deployed site:
+
+```env
+UK_STORAGE_DIR=/home/u613502604/storage/cd
+APPLE_WALLET_PASS_TYPE_ID=pass.com.barber.walllet
+APPLE_WALLET_TEAM_ID=5D9PB994JW
+APPLE_WALLET_ORG_NAME=Urban Kings
+APPLE_WALLET_CERT_PATH=/home/u613502604/storage/cd/wallet/certs/apple-wallet-pass.pem
+APPLE_WALLET_KEY_PATH=/home/u613502604/storage/cd/wallet/certs/apple-wallet-pass.key
+APPLE_WALLET_WWDR_CERT_PATH=/home/u613502604/storage/cd/wallet/certs/AppleWWDRCAG4.pem
+APPLE_WALLET_BASE_URL=https://lawngreen-wolverine-255384.hostingersite.com
+```
+
+Only set `APPLE_WALLET_CERT_PASSWORD` if the private key is encrypted. The
+current `apple-wallet-pass.key` used in local diagnostics does not require it.
 
 ## Storage Layout
 
@@ -297,16 +313,16 @@ storage/backups/
 storage/uploads/
 ```
 
-On Hostinger, either leave `UK_STORAGE_DIR` unset when the app runs from the project folder, or set:
+On Hostinger, point `UK_STORAGE_DIR` to the persistent storage folder:
 
 ```env
-UK_STORAGE_DIR=storage
+UK_STORAGE_DIR=/home/u613502604/storage/cd
 ```
 
 If you need to point exactly to a data folder, set:
 
 ```env
-UK_DATA_DIR=storage/data
+UK_DATA_DIR=/home/u613502604/storage/cd/data
 ```
 
 Create a booking from the public booking flow, then press `Add To Apple Wallet`.
