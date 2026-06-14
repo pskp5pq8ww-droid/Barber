@@ -287,6 +287,20 @@ details[open] .auth-hint summary::before { content: "▾ "; }
 }
 .auth-back-btn:hover { color: var(--chrome-2); }
 
+.auth-link {
+  display: inline-block;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: var(--gold-soft, #d6b25e);
+  font-size: .82rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-link:hover { color: var(--gold, #c8a45d); }
+
 /* Mobile */
 @media (max-width: 480px) {
   .auth-card {

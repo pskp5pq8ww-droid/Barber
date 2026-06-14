@@ -301,6 +301,86 @@ async function downloadCustomerWalletPass({ rootDir, storageRoot, customer }) {
   return { result, metadata };
 }
 
+/**
+ * Apple Wallet device registration (web service). Stores the device's push
+ * token so a later push (Phase 3) can tell the device to refresh the pass.
+ * Returns { ok, status } using Apple's expected status codes (201 new / 200
+ * already registered / 401 bad auth / 404 unknown serial).
+ */
+async function registerDevice({ rootDir, storageRoot, serialNumber, deviceLibraryIdentifier, pushToken, authToken }) {
+  const found = await findWalletBySerial({ rootDir, storageRoot, serialNumber });
+  if (!found) return { ok: false, status: 404 };
+  if (!authToken || authToken !== found.metadata.authenticationToken) return { ok: false, status: 401 };
+
+  const config = found.config;
+  const metadata = found.metadata;
+  if (!Array.isArray(metadata.devices)) metadata.devices = [];
+  const existing = metadata.devices.find(d => d.deviceLibraryIdentifier === deviceLibraryIdentifier);
+  const stamp = new Date().toISOString();
+  if (existing) {
+    existing.pushToken = pushToken || existing.pushToken;
+    existing.updatedAt = stamp;
+    await saveMetadata(config, metadata);
+    return { ok: true, status: 200 };
+  }
+  metadata.devices.push({ deviceLibraryIdentifier, pushToken: pushToken || "", registeredAt: stamp, updatedAt: stamp });
+  metadata.passInstallState = "registered";
+  await saveMetadata(config, metadata);
+  await appendHistory(config, metadata.customerId, {
+    action: "wallet_pass_registered_on_device",
+    serialNumber: metadata.serialNumber,
+    deviceCount: metadata.devices.length,
+  });
+  return { ok: true, status: 201 };
+}
+
+async function unregisterDevice({ rootDir, storageRoot, serialNumber, deviceLibraryIdentifier, authToken }) {
+  const found = await findWalletBySerial({ rootDir, storageRoot, serialNumber });
+  if (!found) return { ok: false, status: 404 };
+  if (!authToken || authToken !== found.metadata.authenticationToken) return { ok: false, status: 401 };
+  const config = found.config;
+  const metadata = found.metadata;
+  metadata.devices = (metadata.devices || []).filter(d => d.deviceLibraryIdentifier !== deviceLibraryIdentifier);
+  if (metadata.devices.length === 0 && metadata.passInstallState === "registered") {
+    metadata.passInstallState = metadata.firstDownloadedAt ? "downloaded" : "created";
+  }
+  await saveMetadata(config, metadata);
+  await appendHistory(config, metadata.customerId, {
+    action: "wallet_pass_unregistered_device",
+    serialNumber: metadata.serialNumber,
+    deviceCount: metadata.devices.length,
+  });
+  return { ok: true, status: 200 };
+}
+
+/**
+ * Serial numbers of passes registered to a device that changed since a tag.
+ * Apple polls this; we compare against each pass's lastUpdatedTag/updatedAt.
+ */
+async function devicePassUpdates({ rootDir, storageRoot, deviceLibraryIdentifier, passTypeIdentifier, updatedSince }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  let dirs = [];
+  try {
+    dirs = await fsp.readdir(config.storagePath);
+  } catch (_) {
+    return { serialNumbers: [], lastUpdated: new Date().toISOString() };
+  }
+  const serialNumbers = [];
+  let latest = updatedSince || "";
+  for (const dir of dirs) {
+    const metadata = await readJson(walletPaths(config, dir).metadata, null);
+    if (!metadata || !Array.isArray(metadata.devices)) continue;
+    if (!metadata.devices.some(d => d.deviceLibraryIdentifier === deviceLibraryIdentifier)) continue;
+    if (passTypeIdentifier && config.passTypeIdentifier && passTypeIdentifier !== config.passTypeIdentifier) continue;
+    const tag = metadata.lastUpdatedTag || metadata.updatedAt || "";
+    if (!updatedSince || String(tag) > String(updatedSince)) {
+      serialNumbers.push(metadata.serialNumber);
+      if (String(tag) > String(latest)) latest = tag;
+    }
+  }
+  return { serialNumbers, lastUpdated: latest || new Date().toISOString() };
+}
+
 async function generateTestWallet({ rootDir, storageRoot }) {
   const config = walletConfig({ rootDir, storageRoot });
   let metadata = await loadMetadata(config, "test-client");
@@ -490,7 +570,23 @@ async function walletReportById({ rootDir, storageRoot, reportId }) {
   return readWalletReport(config, reportId);
 }
 
+async function setWalletStatus({ rootDir, storageRoot, serialNumber, status }) {
+  const found = await findWalletBySerial({ rootDir, storageRoot, serialNumber });
+  if (!found) return null;
+  const allowed = ["active", "suspended", "cancelled"];
+  const next = allowed.includes(status) ? status : "active";
+  found.metadata.status = next;
+  found.metadata.lastUpdatedTag = new Date().toISOString();
+  await saveMetadata(found.config, found.metadata);
+  await appendHistory(found.config, found.metadata.customerId, {
+    action: `wallet_pass_${next}`,
+    serialNumber: found.metadata.serialNumber,
+  });
+  return found.metadata;
+}
+
 module.exports = {
+  devicePassUpdates,
   downloadablePass,
   downloadCustomerWalletPass,
   ensureWalletForBooking,
@@ -498,8 +594,11 @@ module.exports = {
   findWalletBySerial,
   findWalletForBooking,
   generateTestWallet,
+  registerDevice,
   runWalletDiagnostics,
+  setWalletStatus,
   simulateVisit,
+  unregisterDevice,
   updateWalletForBookingStatus,
   walletConfig,
   walletReportById,

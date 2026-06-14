@@ -311,6 +311,14 @@ window.UK_USERS = (function () {
     return result;
   }
 
+  async function requestPasswordReset(email) {
+    return _api("/api/auth/forgot", { method: "POST", body: { email } });
+  }
+
+  async function resetPassword(token, password, passwordConfirm) {
+    return _api("/api/auth/reset", { method: "POST", body: { token, password, passwordConfirm } });
+  }
+
   // Loyalty pass for the signed-in customer (identity comes from the session).
   async function getMyWallet() {
     return _api("/api/wallet/me");
@@ -522,6 +530,26 @@ window.UK_USERS = (function () {
     return result;
   }
 
+  async function suspendWallet(serialNumber) {
+    const result = await _api(`/api/admin/wallet/${encodeURIComponent(serialNumber)}/suspend`, { method: "POST", body: {} });
+    if (result.ok && result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function reactivateWallet(serialNumber) {
+    const result = await _api(`/api/admin/wallet/${encodeURIComponent(serialNumber)}/reactivate`, { method: "POST", body: {} });
+    if (result.ok && result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function getCustomerOverview(customerId) {
+    return _api(`/api/admin/customers/${encodeURIComponent(customerId)}/overview`);
+  }
+
+  async function getPasswordResets() {
+    return _api("/api/admin/password-resets");
+  }
+
   async function runWalletDiagnostics() {
     return _api("/api/admin/wallet/diagnostics");
   }
@@ -548,6 +576,8 @@ window.UK_USERS = (function () {
     deactivateBarberUser,
     createCustomerUser,
     registerCustomer,
+    requestPasswordReset,
+    resetPassword,
     getMyWallet,
     downloadMyWalletPass,
     updateCustomerUser,
@@ -591,6 +621,10 @@ window.UK_USERS = (function () {
     runWalletDiagnostics,
     getWalletReports,
     getWalletReport,
+    suspendWallet,
+    reactivateWallet,
+    getCustomerOverview,
+    getPasswordResets,
     DEMO_TODAY: "",
     demoCredentials: {},
   };

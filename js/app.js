@@ -435,6 +435,12 @@
 	        return;
 	      }
       _bookingConfirmation = result.booking;
+      // Stash the guest booking claim token so a later sign-up can attach it.
+      try {
+        if (result.claimToken && !Auth.getSession()) {
+          sessionStorage.setItem("uk_claim_booking_token", result.claimToken);
+        }
+      } catch (_) {}
       Views.inited["admin-portal"] = false;
       Views.inited["barber-portal"] = false;
       Views.inited["customer-portal"] = false;
@@ -1472,19 +1478,24 @@
         <div class="pt-panel-head"><h3>Wallet Members</h3><span class="dim">${wallets.length} records</span></div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Holder</th><th>Serial</th><th>Status</th><th>Visits</th><th>Reward</th><th>Pass</th><th>Updated</th></tr></thead>
+            <thead><tr><th>Holder</th><th>Serial</th><th>Pass status</th><th>Visits</th><th>Install</th><th>Devices</th><th>Signed</th><th>Actions</th></tr></thead>
             <tbody>
               ${wallets.length ? wallets.map(w => `
                 <tr>
                   <td>${_escapeHTML(w.holderName || "Member")}</td>
                   <td><span class="dim">${_escapeHTML(w.serialNumber || "")}</span></td>
-                  <td>${_statusBadge(w.bookingStatus || "pending")}</td>
-                  <td>${Number(w.visits || 0)} / ${Number(w.visitsGoal || 5)}</td>
-                  <td>${_escapeHTML(w.reward || "Free Haircut After 5 Visits")}</td>
+                  <td><span class="status-badge ${w.status === "suspended" || w.status === "cancelled" ? "cancelled" : "confirmed"}">${_escapeHTML(w.status || "active")}</span></td>
+                  <td>${Number(typeof w.stampCount === "number" ? w.stampCount : w.visits || 0)} / ${Number(w.visitsGoal || 5)}</td>
+                  <td class="dim">${_escapeHTML(_walletInstallLabel(w.passInstallState))}</td>
+                  <td class="dim">${Number(w.deviceCount || 0)}</td>
                   <td><span class="status-badge ${w.passStatus === "signed" ? "confirmed" : "pending"}">${_escapeHTML(w.passStatus || "metadata-only")}</span></td>
-                  <td class="dim">${_escapeHTML((w.updatedAt || "").slice(0, 16).replace("T", " "))}</td>
+                  <td class="wallet-report-actions">
+                    ${w.status === "suspended" || w.status === "cancelled"
+                      ? `<button class="btn btn-ghost btn-sm" data-wallet-reactivate="${_escapeHTML(w.serialNumber)}">Reactivate</button>`
+                      : `<button class="btn btn-ghost btn-sm" data-wallet-suspend="${_escapeHTML(w.serialNumber)}">Suspend</button>`}
+                  </td>
                 </tr>
-              `).join("") : `<tr><td colspan="7"><div class="pt-empty">No Wallet members yet.</div></td></tr>`}
+              `).join("") : `<tr><td colspan="8"><div class="pt-empty">No Wallet members yet.</div></td></tr>`}
             </tbody>
           </table>
         </div>
@@ -1502,6 +1513,11 @@
     el.querySelector("[data-wallet-visit]")?.addEventListener("click", async () => {
       if (firstWallet) show(await UK_USERS.simulateWalletVisit(firstWallet.serialNumber), "Visit simulated.");
     });
+
+    el.querySelectorAll("[data-wallet-suspend]").forEach(btn => btn.addEventListener("click", async () =>
+      show(await UK_USERS.suspendWallet(btn.dataset.walletSuspend), "Pass suspended.")));
+    el.querySelectorAll("[data-wallet-reactivate]").forEach(btn => btn.addEventListener("click", async () =>
+      show(await UK_USERS.reactivateWallet(btn.dataset.walletReactivate), "Pass reactivated.")));
 
     el.querySelector("[data-wallet-copy-ref]")?.addEventListener("click", (event) => {
       const btn = event.currentTarget;
@@ -2547,13 +2563,17 @@
       const success = $("#register-success");
       if (error) error.textContent = "";
       if (success) success.textContent = "";
-	      const result = await UK_USERS.registerCustomer({
+	      let claimBookingToken = "";
+      try { claimBookingToken = sessionStorage.getItem("uk_claim_booking_token") || ""; } catch (_) {}
+      const result = await UK_USERS.registerCustomer({
         name: $("#register-name").value.trim(),
         email: $("#register-email").value.trim(),
         phone: $("#register-phone").value.trim(),
         password: $("#register-password").value,
         passwordConfirm: $("#register-confirm").value,
+        claimBookingToken,
       });
+      try { if (result.ok) sessionStorage.removeItem("uk_claim_booking_token"); } catch (_) {}
       if (!result.ok) {
         if (error) error.textContent = result.error;
         return;
@@ -3199,6 +3219,76 @@
         goToRoute(VIEW_PATHS[`${role}-portal`] || "/");
       });
     }
+
+    _bindPasswordRecovery(form);
+  }
+
+  // "Forgot password?" + reset flow on the auth card.
+  function _bindPasswordRecovery(loginForm) {
+    const forgotLink = $("#auth-forgot-link");
+    const forgotForm = $("#forgot-form");
+    const resetForm = $("#reset-form");
+    if (!forgotForm || forgotForm.dataset.bound === "1") {
+      // Still handle a reset token on load even if already bound.
+      _maybeShowResetForm(loginForm, resetForm);
+      return;
+    }
+    forgotForm.dataset.bound = "1";
+
+    const showForgot = (show) => {
+      if (loginForm) loginForm.hidden = show;
+      if (forgotLink) forgotLink.hidden = show;
+      forgotForm.hidden = !show;
+    };
+
+    forgotLink?.addEventListener("click", () => showForgot(true));
+    $("#forgot-cancel")?.addEventListener("click", () => showForgot(false));
+
+    forgotForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = $("#forgot-error"), ok = $("#forgot-success");
+      if (err) err.textContent = ""; if (ok) ok.textContent = "";
+      const email = ($("#forgot-email") || {}).value || "";
+      const res = await UK_USERS.requestPasswordReset(email.trim());
+      if (ok) ok.textContent = res.message || "If an account exists for that email, a reset link has been created.";
+      // In this build email is not sent; if the server returned a dev link, offer it.
+      if (res.devResetPath && ok) {
+        const a = document.createElement("a");
+        a.href = res.devResetPath;
+        a.textContent = "Open reset link";
+        a.className = "auth-link";
+        a.style.display = "inline-block";
+        a.style.marginTop = "8px";
+        ok.appendChild(document.createElement("br"));
+        ok.appendChild(a);
+      }
+    });
+
+    resetForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = $("#reset-error"), ok = $("#reset-success");
+      if (err) err.textContent = ""; if (ok) ok.textContent = "";
+      const token = new URLSearchParams(window.location.search).get("token") || "";
+      const password = ($("#reset-password") || {}).value || "";
+      const confirm = ($("#reset-confirm") || {}).value || "";
+      const res = await UK_USERS.resetPassword(token, password, confirm);
+      if (!res.ok) { if (err) err.textContent = res.error || "Could not reset password."; return; }
+      if (ok) ok.textContent = res.message || "Your password has been updated. Please sign in.";
+      resetForm.hidden = true;
+      if (loginForm) loginForm.hidden = false;
+      if (forgotLink) forgotLink.hidden = false;
+    });
+
+    _maybeShowResetForm(loginForm, resetForm);
+  }
+
+  function _maybeShowResetForm(loginForm, resetForm) {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token || !resetForm) return;
+    if (loginForm) loginForm.hidden = true;
+    const forgotLink = $("#auth-forgot-link");
+    if (forgotLink) forgotLink.hidden = true;
+    resetForm.hidden = false;
   }
 
   /* =====================================================

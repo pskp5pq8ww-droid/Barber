@@ -67,6 +67,7 @@ const DATA_FILES = {
   payments: "payments.json",
   sessions: "sessions.json",
   wallets: "wallets.json",
+  passwordResets: "password-resets.json",
 };
 
 let writeQueue = Promise.resolve();
@@ -522,8 +523,11 @@ function decorateBooking(booking, store) {
   const wallet = booking.walletSerialNumber && Array.isArray(store.wallets)
     ? store.wallets.find(item => item.serialNumber === booking.walletSerialNumber)
     : null;
+  const safe = clone(booking);
+  // Internal claim secret must never leave the server.
+  delete safe.claimTokenHash;
   return {
-    ...clone(booking),
+    ...safe,
     service: booking.service || booking.serviceName,
     customer: customer ? sanitizeUser(customer) : null,
     barber: barber ? sanitizeUser(barber) : null,
@@ -587,6 +591,31 @@ function requestIsHttps(req) {
   const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
   if (proto) return proto === "https";
   return Boolean(req.socket && req.socket.encrypted);
+}
+
+function clientIp(req) {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return fwd || (req.socket && req.socket.remoteAddress) || "unknown";
+}
+
+// Minimal in-memory sliding-window rate limiter for sensitive auth endpoints.
+const rateBuckets = new Map();
+function rateLimit(key, max, windowMs) {
+  const now = Date.now();
+  const hits = (rateBuckets.get(key) || []).filter(ts => now - ts < windowMs);
+  if (hits.length >= max) {
+    const retryAfter = Math.ceil((windowMs - (now - hits[0])) / 1000);
+    return { allowed: false, retryAfter };
+  }
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  // Opportunistic cleanup to bound memory.
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (!v.some(ts => now - ts < windowMs)) rateBuckets.delete(k);
+    }
+  }
+  return { allowed: true };
 }
 
 function cookieHeader(token, maxAge = SESSION_TTL_MS / 1000, { secure = false } = {}) {
@@ -1010,13 +1039,48 @@ async function createBooking(store, payload, actor = null) {
     createdAt: now(),
     updatedAt: now(),
   };
+
+  // Guest bookings get a one-time claim token so the visitor can securely
+  // attach this booking to a new account later (token-based, not email-match).
+  let claimToken = "";
+  if (!customer) {
+    claimToken = crypto.randomBytes(24).toString("hex");
+    booking.claimTokenHash = crypto.createHash("sha256").update(claimToken).digest("hex");
+    booking.claimExpiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    booking.claimed = false;
+  }
+
   const walletMetadata = await walletService.ensureWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
   attachWalletToBooking(booking, walletMetadata);
   upsertWalletIndex(store, walletMetadata);
   store.bookings.unshift(booking);
   addLog(store, actor, "booking.created", `Booking created for ${booking.customerName} at ${booking.date} ${booking.time}.`, { type: "booking", id: booking.id });
   await writeMany({ bookings: store.bookings, wallets: store.wallets, activityLog: store.activityLog }, { backupKeys: ["bookings"] });
-  return { ok: true, booking: decorateBooking(booking, store) };
+  const result = { ok: true, booking: decorateBooking(booking, store) };
+  if (claimToken) result.claimToken = claimToken;
+  return result;
+}
+
+// Securely attach a guest booking to a customer using its one-time claim token.
+async function claimGuestBooking(store, customer, claimToken) {
+  if (!claimToken) return null;
+  const hash = crypto.createHash("sha256").update(String(claimToken)).digest("hex");
+  const booking = store.bookings.find(b => b.claimTokenHash === hash && !b.claimed && b.claimExpiresAt && Date.now() < b.claimExpiresAt);
+  if (!booking) return null;
+  booking.customerId = customer.id;
+  booking.customerName = customer.name;
+  booking.customerEmail = customer.email;
+  booking.customerPhone = customer.phone;
+  booking.guest = null;
+  booking.claimed = true;
+  delete booking.claimTokenHash;
+  delete booking.claimExpiresAt;
+  booking.updatedAt = now();
+  // Move the booking onto the customer's single loyalty pass.
+  const metadata = await walletService.ensureWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking });
+  attachWalletToBooking(booking, metadata);
+  upsertWalletIndex(store, metadata);
+  return booking;
 }
 
 async function handleApi(req, res, url) {
@@ -1043,6 +1107,27 @@ async function handleApi(req, res, url) {
     if (!requireRole(req, res, sessionState, "admin")) return;
     const stats = await walletService.walletStats({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
     return json(res, 200, { ok: true, stats, storage: storageStatus(), wallets: (store.wallets || []).map(adminWallet) });
+  }
+
+  // Admins can see pending reset links because email delivery is not wired.
+  if (method === "GET" && pathName === "/api/admin/password-resets") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const pending = (store.passwordResets || [])
+      .filter(r => !r.used && Date.now() < r.expiresAt)
+      .map(r => {
+        const customer = store.customers.find(c => c.id === r.customerId);
+        return {
+          id: r.id,
+          customerId: r.customerId,
+          customerName: customer ? customer.name : "(unknown)",
+          customerEmail: customer ? customer.email : "",
+          createdAt: r.createdAt,
+          expiresAt: new Date(r.expiresAt).toISOString(),
+          // The plain token is never stored, so the admin cannot rebuild the
+          // link here — they re-trigger "forgot" which returns the link once.
+        };
+      });
+    return json(res, 200, { ok: true, resets: pending });
   }
 
   if (method === "GET" && pathName === "/api/admin/wallet/diagnostics") {
@@ -1112,6 +1197,42 @@ async function handleApi(req, res, url) {
     upsertWalletIndex(store, found.metadata);
     await writeCollection("wallets", store.wallets);
     return json(res, 200, { ok: true, wallet: publicWallet(found.metadata) });
+  }
+
+  // Admin overview of one customer: account + single pass + devices + bookings.
+  const adminCustomerOverviewMatch = pathName.match(/^\/api\/admin\/customers\/([^/]+)\/overview$/);
+  if (adminCustomerOverviewMatch && method === "GET") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const customerId = decodeURIComponent(adminCustomerOverviewMatch[1]);
+    const customer = store.customers.find(c => c.id === customerId);
+    if (!customer) return jsonError(res, 404, "CUSTOMER_NOT_FOUND", "Customer not found.");
+    const found = await walletService.findWalletForBooking({ rootDir: ROOT, storageRoot: STORAGE_ROOT, booking: { customerId } });
+    const metadata = found ? found.metadata : null;
+    const bookings = store.bookings.filter(b => b.customerId === customerId).map(b => decorateBooking(b, store));
+    const devices = metadata && Array.isArray(metadata.devices)
+      ? metadata.devices.map(d => ({ deviceLibraryIdentifier: d.deviceLibraryIdentifier, registeredAt: d.registeredAt, hasPushToken: Boolean(d.pushToken) }))
+      : [];
+    return json(res, 200, {
+      ok: true,
+      customer: sanitizeUser(customer),
+      wallet: metadata ? adminWallet(metadata) : null,
+      installState: metadata ? (metadata.passInstallState || "created") : "none",
+      devices,
+      bookings,
+    });
+  }
+
+  const adminWalletStatusMatch = pathName.match(/^\/api\/admin\/wallet\/([^/]+)\/(suspend|reactivate|cancel)$/);
+  if (adminWalletStatusMatch && method === "POST") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const serialNumber = decodeURIComponent(adminWalletStatusMatch[1]);
+    const action = adminWalletStatusMatch[2];
+    const status = action === "suspend" ? "suspended" : action === "cancel" ? "cancelled" : "active";
+    const metadata = await walletService.setWalletStatus({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber, status });
+    if (!metadata) return jsonError(res, 404, "WALLET_NOT_FOUND", "Wallet not found.");
+    upsertWalletIndex(store, metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
   }
 
   const adminWalletVisitMatch = pathName.match(/^\/api\/admin\/wallet\/([^/]+)\/simulate-visit$/);
@@ -1278,15 +1399,43 @@ async function handleApi(req, res, url) {
 
   const appleRegisterMatch = pathName.match(/^\/api\/wallet\/v1\/devices\/([^/]+)\/registrations\/([^/]+)\/([^/]+)$/);
   if (appleRegisterMatch && ["POST", "DELETE"].includes(method)) {
-    return json(res, 200, { ok: true, message: "Apple Wallet device registration placeholder. Push updates are not active yet." });
+    const deviceLibraryIdentifier = decodeURIComponent(appleRegisterMatch[1]);
+    const serialNumber = decodeURIComponent(appleRegisterMatch[3]);
+    const authToken = String(req.headers.authorization || "").replace(/^ApplePass\s+/i, "");
+    if (method === "POST") {
+      const result = await walletService.registerDevice({
+        rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber,
+        deviceLibraryIdentifier, pushToken: body.pushToken, authToken,
+      });
+      if (result.ok) {
+        const found = await walletService.findWalletBySerial({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber });
+        if (found) { upsertWalletIndex(store, found.metadata); await writeCollection("wallets", store.wallets); }
+      }
+      res.writeHead(result.status || 200, { "Content-Type": "application/json" });
+      return res.end("{}");
+    }
+    const result = await walletService.unregisterDevice({
+      rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber, deviceLibraryIdentifier, authToken,
+    });
+    res.writeHead(result.status || 200, { "Content-Type": "application/json" });
+    return res.end("{}");
   }
 
   const appleUpdatesMatch = pathName.match(/^\/api\/wallet\/v1\/devices\/([^/]+)\/registrations\/([^/]+)$/);
   if (appleUpdatesMatch && method === "GET") {
-    return json(res, 200, { serialNumbers: [], lastUpdated: now() });
+    const deviceLibraryIdentifier = decodeURIComponent(appleUpdatesMatch[1]);
+    const passTypeIdentifier = decodeURIComponent(appleUpdatesMatch[2]);
+    const updatedSince = url.searchParams.get("passesUpdatedSince") || "";
+    const result = await walletService.devicePassUpdates({
+      rootDir: ROOT, storageRoot: STORAGE_ROOT, deviceLibraryIdentifier, passTypeIdentifier, updatedSince,
+    });
+    if (!result.serialNumbers.length) { res.writeHead(204); return res.end(); }
+    return json(res, 200, { serialNumbers: result.serialNumbers, lastUpdated: result.lastUpdated });
   }
 
   if (method === "POST" && pathName === "/api/auth/login") {
+    const limit = rateLimit(`login:${clientIp(req)}`, 10, 5 * 60 * 1000);
+    if (!limit.allowed) return jsonError(res, 429, "RATE_LIMITED", "Too many attempts. Please try again later.", { "Retry-After": String(limit.retryAfter) });
     let role = String(body.role || "customer");
     const lists = { admin: store.admins, barber: store.barbers, customer: store.customers };
     const q = String(body.username || "").trim().toLowerCase();
@@ -1308,6 +1457,65 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, session: publicSession(userSession), data: visibleStore(store, userSession) }, { "Set-Cookie": cookieHeader(userSession.token, undefined, { secure: requestIsHttps(req) }) });
   }
 
+  // Password recovery — token based. Email delivery is not configured, so the
+  // reset link is surfaced to admins (GET /api/admin/password-resets) instead.
+  if (method === "POST" && pathName === "/api/auth/forgot") {
+    const limit = rateLimit(`forgot:${clientIp(req)}`, 5, 15 * 60 * 1000);
+    if (!limit.allowed) return jsonError(res, 429, "RATE_LIMITED", "Too many attempts. Please try again later.", { "Retry-After": String(limit.retryAfter) });
+    const email = String(body.email || "").trim().toLowerCase();
+    // Anti-enumeration: identical generic response whether or not the email exists.
+    const generic = { ok: true, message: "If an account exists for that email, a reset link has been created." };
+    const customer = email ? store.customers.find(c => String(c.email || "").toLowerCase() === email) : null;
+    if (customer) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      if (!Array.isArray(store.passwordResets)) store.passwordResets = [];
+      // Invalidate previous pending resets for this customer.
+      store.passwordResets = store.passwordResets.filter(r => r.customerId !== customer.id);
+      store.passwordResets.push({
+        id: crypto.randomUUID(),
+        customerId: customer.id,
+        tokenHash,
+        createdAt: now(),
+        expiresAt: Date.now() + 60 * 60 * 1000,
+        used: false,
+        requestedFromIp: clientIp(req),
+      });
+      addLog(store, { userId: customer.id, role: "customer" }, "password_reset_requested", `Password reset requested for ${customer.email}.`, { type: "customer", id: customer.id });
+      await writeMany({ passwordResets: store.passwordResets, activityLog: store.activityLog });
+      // The plain token is returned ONLY so the admin tool / dev can build the
+      // link; it is never emailed here. In production, surface via admin panel.
+      return json(res, 200, { ...generic, devResetPath: `/reset-password?token=${token}` });
+    }
+    return json(res, 200, generic);
+  }
+
+  if (method === "POST" && pathName === "/api/auth/reset") {
+    const limit = rateLimit(`reset:${clientIp(req)}`, 10, 15 * 60 * 1000);
+    if (!limit.allowed) return jsonError(res, 429, "RATE_LIMITED", "Too many attempts. Please try again later.", { "Retry-After": String(limit.retryAfter) });
+    const token = String(body.token || "");
+    const password = String(body.password || "");
+    const passwordConfirm = body.passwordConfirm !== undefined ? String(body.passwordConfirm) : password;
+    if (password.length < 8) return json(res, 400, { ok: false, error: "Password must be at least 8 characters." });
+    if (password !== passwordConfirm) return json(res, 400, { ok: false, error: "Passwords do not match." });
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const reset = (store.passwordResets || []).find(r => r.tokenHash === tokenHash && !r.used);
+    if (!reset || Date.now() > reset.expiresAt) {
+      return json(res, 400, { ok: false, code: "RESET_TOKEN_INVALID", error: "This reset link is invalid or has expired." });
+    }
+    const customer = store.customers.find(c => c.id === reset.customerId);
+    if (!customer) return json(res, 400, { ok: false, code: "RESET_TOKEN_INVALID", error: "This reset link is invalid or has expired." });
+    customer.passwordHash = hashPassword(password);
+    customer.updatedAt = now();
+    reset.used = true;
+    reset.usedAt = now();
+    // Invalidate all existing sessions for this customer.
+    store.sessions = store.sessions.filter(s => s.customerId !== customer.id);
+    addLog(store, { userId: customer.id, role: "customer" }, "password_reset_completed", `Password reset for ${customer.email}.`, { type: "customer", id: customer.id });
+    await writeMany({ customers: store.customers, passwordResets: store.passwordResets, sessions: store.sessions, activityLog: store.activityLog });
+    return json(res, 200, { ok: true, message: "Your password has been updated. Please sign in." });
+  }
+
   if (method === "POST" && pathName === "/api/auth/logout") {
     if (session) store.sessions = store.sessions.filter(s => s.token !== session.token);
     await writeCollection("sessions", store.sessions);
@@ -1315,6 +1523,8 @@ async function handleApi(req, res, url) {
   }
 
   if (method === "POST" && pathName === "/api/customers/register") {
+    const regLimit = rateLimit(`register:${clientIp(req)}`, 5, 15 * 60 * 1000);
+    if (!regLimit.allowed) return jsonError(res, 429, "RATE_LIMITED", "Too many attempts. Please try again later.", { "Retry-After": String(regLimit.retryAfter) });
     const firstName = String(body.firstName || "").trim();
     const lastName = String(body.lastName || "").trim();
     const composedName = [firstName, lastName].filter(Boolean).join(" ").trim();
@@ -1380,15 +1590,29 @@ async function handleApi(req, res, url) {
       addLog(store, { userId: customer.id, role: "customer" }, "wallet_pass_creation_failed", `Loyalty pass deferred for ${customer.name}.`, { type: "customer", id: customer.id });
     }
 
+    // Optionally attach a guest booking made before signing up.
+    let claimedBooking = null;
+    if (body.claimBookingToken) {
+      try {
+        claimedBooking = await claimGuestBooking(store, customer, String(body.claimBookingToken));
+        if (claimedBooking) {
+          addLog(store, { userId: customer.id, role: "customer" }, "guest_booking_claimed", `Guest booking ${claimedBooking.id} attached to ${customer.name}.`, { type: "booking", id: claimedBooking.id });
+        }
+      } catch (err) {
+        console.error("[booking] claim failed", err && err.message);
+      }
+    }
+
     // Auto-login: create a secure session.
     const userSession = makeSession(customer);
     store.sessions.push(userSession);
-    await writeMany({ customers: store.customers, wallets: store.wallets, sessions: store.sessions, activityLog: store.activityLog });
+    await writeMany({ customers: store.customers, bookings: store.bookings, wallets: store.wallets, sessions: store.sessions, activityLog: store.activityLog });
     return json(res, 201, {
       ok: true,
       customer: sanitizeUser(customer),
       session: publicSession(userSession),
       wallet: publicWallet(walletMetadata),
+      claimedBooking: claimedBooking ? decorateBooking(claimedBooking, store) : null,
       data: visibleStore(store, userSession),
     }, { "Set-Cookie": cookieHeader(userSession.token, undefined, { secure: requestIsHttps(req) }) });
   }

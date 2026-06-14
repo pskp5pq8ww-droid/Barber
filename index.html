@@ -496,6 +496,32 @@
               <span id="auth-submit-label">Sign In</span>
               <span class="auth-spinner" id="auth-spinner" aria-hidden="true"></span>
             </button>
+            <button type="button" class="auth-link" id="auth-forgot-link">Forgot password?</button>
+          </form>
+
+          <form class="auth-form" id="forgot-form" hidden novalidate>
+            <div class="auth-field">
+              <label for="forgot-email">Email</label>
+              <input type="email" id="forgot-email" autocomplete="email" placeholder="you@email.com" />
+            </div>
+            <div class="auth-error" id="forgot-error" role="alert" aria-live="polite"></div>
+            <div class="auth-success" id="forgot-success" role="status" aria-live="polite"></div>
+            <button type="submit" class="btn btn-gold">Send reset link</button>
+            <button type="button" class="auth-link" id="forgot-cancel">Back to sign in</button>
+          </form>
+
+          <form class="auth-form" id="reset-form" hidden novalidate>
+            <div class="auth-field">
+              <label for="reset-password">New password</label>
+              <input type="password" id="reset-password" autocomplete="new-password" placeholder="Minimum 8 characters" />
+            </div>
+            <div class="auth-field">
+              <label for="reset-confirm">Confirm new password</label>
+              <input type="password" id="reset-confirm" autocomplete="new-password" placeholder="Repeat password" />
+            </div>
+            <div class="auth-error" id="reset-error" role="alert" aria-live="polite"></div>
+            <div class="auth-success" id="reset-success" role="status" aria-live="polite"></div>
+            <button type="submit" class="btn btn-gold">Update password</button>
           </form>
 
           <details class="auth-hint" id="auth-hint-details" hidden>
