@@ -305,7 +305,9 @@
                 <span>${_escapeHTML(booking.wallet?.bookingStatus || booking.status || "Pending")}</span>
               </div>
             </div>
-            <button class="btn btn-gold" data-wallet-booking="${_escapeHTML(booking.id)}">Add Booking to Apple Wallet</button>
+            <button class="wallet-badge-button" type="button" data-wallet-booking="${_escapeHTML(booking.id)}" aria-label="Add Booking to Apple Wallet">
+              <img src="/assets/apple-wallet/add-to-apple-wallet.svg" alt="Add to Apple Wallet" loading="lazy" />
+            </button>
             <div class="form-feedback" id="wallet-feedback" aria-live="polite"></div>
           </div>
           <div class="payment-actions">
@@ -321,16 +323,24 @@
     host.querySelector("[data-wallet-booking]")?.addEventListener("click", async (event) => {
       const btn = event.currentTarget;
       const feedback = $("#wallet-feedback");
-      btn.disabled = true;
-      const originalLabel = btn.textContent;
-      btn.textContent = "Generating Wallet Pass...";
+      if (btn.dataset.loading === "true") return;
+      btn.dataset.loading = "true";
+      btn.classList.add("is-loading");
+      btn.setAttribute("aria-busy", "true");
       if (feedback) {
-        feedback.textContent = "";
+        feedback.textContent = "Generating Wallet Pass...";
         feedback.className = "form-feedback";
       }
-      const result = await UK_USERS.generateWalletForBooking(btn.dataset.walletBooking);
-      btn.disabled = false;
-      btn.textContent = originalLabel;
+      let result;
+      try {
+        result = await UK_USERS.generateWalletForBooking(btn.dataset.walletBooking);
+      } catch (err) {
+        result = { ok: false, error: err.message || "We couldn't generate your Wallet Pass. Please try again." };
+      } finally {
+        btn.dataset.loading = "false";
+        btn.classList.remove("is-loading");
+        btn.removeAttribute("aria-busy");
+      }
       if (!result.ok) {
         if (feedback) {
           const lines = [result.error || "We couldn't generate your Wallet Pass. Please try again."];
