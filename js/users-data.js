@@ -546,6 +546,16 @@ window.UK_USERS = (function () {
     return _api(`/api/admin/customers/${encodeURIComponent(customerId)}/overview`);
   }
 
+  async function pushWalletUpdate(serialNumber) {
+    const result = await _api(`/api/admin/wallet/${encodeURIComponent(serialNumber)}/push`, { method: "POST", body: {} });
+    if (result.ok && result.wallet) _replace("wallets", result.wallet);
+    return result;
+  }
+
+  async function testWalletPush() {
+    return _api("/api/admin/wallet/push-test", { method: "POST", body: {} });
+  }
+
   async function getPasswordResets() {
     return _api("/api/admin/password-resets");
   }
@@ -625,6 +635,8 @@ window.UK_USERS = (function () {
     reactivateWallet,
     getCustomerOverview,
     getPasswordResets,
+    pushWalletUpdate,
+    testWalletPush,
     DEMO_TODAY: "",
     demoCredentials: {},
   };

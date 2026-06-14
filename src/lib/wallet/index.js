@@ -1,9 +1,10 @@
 const crypto = require("crypto");
 const fsp = require("fs/promises");
 
-const { walletConfig, missingSigningConfig, signingDiagnostics } = require("./config");
+const { walletConfig, missingSigningConfig, signingDiagnostics, readSecretSource } = require("./config");
 const { appendHistory, passExists, readJson, safeSegment, walletPaths, writeJson } = require("./storage");
 const { buildSignedPass } = require("./passkit");
+const apns = require("./apns");
 const {
   getWalletConfigurationDiagnostics,
   writeWalletReport,
@@ -191,6 +192,133 @@ async function tryBuildPass(config, metadata, meta = {}) {
   return metadata;
 }
 
+function pushEnabled() {
+  return String(process.env.APPLE_WALLET_PUSH_ENABLED || "true").toLowerCase() !== "false";
+}
+
+/**
+ * Best-effort APNs push to every device registered to this pass. Reuses the
+ * Pass Type ID certificate for auth (no extra credential). Prunes dead tokens
+ * (410 / BadDeviceToken). Never throws into the caller — push is non-critical;
+ * a failure is recorded in history with a safe reason and returned.
+ *
+ * @returns {Promise<{skipped?:string, attempted:number, sent:number, removed:number, connectError:object|null, reasons:object}>}
+ */
+async function notifyDevices(config, metadata, reason = "pass.updated") {
+  const devices = Array.isArray(metadata.devices) ? metadata.devices : [];
+  if (!pushEnabled()) return { skipped: "disabled", attempted: 0, sent: 0, removed: 0, connectError: null, reasons: {} };
+  if (devices.length === 0) return { skipped: "no-devices", attempted: 0, sent: 0, removed: 0, connectError: null, reasons: {} };
+  if (!config.passTypeIdentifier || !config.certPath || !config.keyPath) {
+    return { skipped: "not-configured", attempted: 0, sent: 0, removed: 0, connectError: null, reasons: {} };
+  }
+
+  let cert, key;
+  try {
+    cert = await readSecretSource(config.certPath, config.rootDir, "passCert", "pass certificate");
+    key = await readSecretSource(config.keyPath, config.rootDir, "privateKey", "private key");
+  } catch (err) {
+    await appendHistory(config, metadata.customerId, { action: "wallet_pass_push_failed", serialNumber: metadata.serialNumber, reason: (err && err.code) || "READ_FAILED" });
+    return { skipped: "cert-unreadable", attempted: 0, sent: 0, removed: 0, connectError: { code: (err && err.code) || "READ_FAILED" }, reasons: {} };
+  }
+
+  let outcome;
+  try {
+    outcome = await apns.pushToDevices({
+      cert, key, passphrase: config.certPassword || undefined,
+      topic: config.passTypeIdentifier, devices,
+    });
+  } catch (err) {
+    await appendHistory(config, metadata.customerId, { action: "wallet_pass_push_failed", serialNumber: metadata.serialNumber, reason: "APNS_ERROR" });
+    return { skipped: null, attempted: devices.length, sent: 0, removed: 0, connectError: { code: "APNS_ERROR" }, reasons: {} };
+  }
+
+  // Remove dead device tokens so we stop pushing to them.
+  const dead = new Set(outcome.results.filter(r => r.unregistered).map(r => r.deviceLibraryIdentifier));
+  let removed = 0;
+  if (dead.size) {
+    const before = metadata.devices.length;
+    metadata.devices = metadata.devices.filter(d => !dead.has(d.deviceLibraryIdentifier));
+    removed = before - metadata.devices.length;
+    if (metadata.devices.length === 0 && metadata.passInstallState === "registered") {
+      metadata.passInstallState = metadata.firstDownloadedAt ? "downloaded" : "created";
+    }
+  }
+
+  // Aggregate reasons (no tokens) for diagnostics.
+  const reasons = {};
+  for (const r of outcome.results) {
+    const k = r.ok ? "Delivered" : (r.reason || `HTTP_${r.status}`);
+    reasons[k] = (reasons[k] || 0) + 1;
+  }
+
+  metadata.lastPushAt = new Date().toISOString();
+  await saveMetadata(config, metadata);
+  await appendHistory(config, metadata.customerId, {
+    action: outcome.connectError ? "wallet_pass_push_failed" : "wallet_pass_pushed",
+    serialNumber: metadata.serialNumber,
+    trigger: reason,
+    attempted: devices.length,
+    sent: outcome.sent,
+    removed,
+    connectError: outcome.connectError ? outcome.connectError.code : "",
+  });
+
+  return { skipped: null, attempted: devices.length, sent: outcome.sent, removed, connectError: outcome.connectError, reasons };
+}
+
+/**
+ * Probe APNs connectivity + certificate auth by pushing to a throwaway token.
+ * A reason like "BadDeviceToken" proves the TLS client cert authenticated and
+ * the connection works (only the fake token is rejected). A connect/cert error
+ * means the credential or network is the problem. Returns a secret-free result.
+ */
+async function testApnsConnectivity({ rootDir, storageRoot }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  if (!config.passTypeIdentifier || !config.certPath || !config.keyPath) {
+    return { ok: false, reachable: false, reason: "NOT_CONFIGURED" };
+  }
+  let cert, key;
+  try {
+    cert = await readSecretSource(config.certPath, config.rootDir, "passCert", "pass certificate");
+    key = await readSecretSource(config.keyPath, config.rootDir, "privateKey", "private key");
+  } catch (err) {
+    return { ok: false, reachable: false, reason: (err && err.code) || "CERT_UNREADABLE" };
+  }
+  const dummy = "0000000000000000000000000000000000000000000000000000000000000000";
+  const outcome = await apns.pushToDevices({
+    cert, key, passphrase: config.certPassword || undefined,
+    topic: config.passTypeIdentifier,
+    devices: [{ deviceLibraryIdentifier: "probe", pushToken: dummy }],
+  });
+  if (outcome.connectError) {
+    return { ok: false, reachable: false, host: apns.apnsHost(), reason: outcome.connectError.code, message: outcome.connectError.message };
+  }
+  const r = outcome.results[0] || {};
+  // Any HTTP response (even a rejected token) means cert auth + reachability OK,
+  // EXCEPT certificate/topic rejections which indicate a real credential issue.
+  const credentialProblem = ["BadCertificate", "BadCertificateEnvironment", "Forbidden", "MissingTopic", "TopicDisallowed"].includes(r.reason);
+  return {
+    ok: !credentialProblem,
+    reachable: true,
+    host: apns.apnsHost(),
+    topic: config.passTypeIdentifier,
+    status: r.status,
+    reason: r.reason || "",
+    interpretation: credentialProblem
+      ? "APNs reachable but rejected the certificate/topic — check the Pass Type ID certificate."
+      : "APNs reachable and the certificate authenticated (the dummy token was rejected as expected).",
+  };
+}
+
+/** Public: rebuild + push the current pass to its registered devices. */
+async function pushPassUpdate({ rootDir, storageRoot, serialNumber, reason = "manual" }) {
+  const found = await findWalletBySerial({ rootDir, storageRoot, serialNumber });
+  if (!found) return null;
+  await tryBuildPass(found.config, found.metadata, { endpoint: "push" });
+  const summary = await notifyDevices(found.config, found.metadata, reason);
+  return { metadata: found.metadata, push: summary };
+}
+
 async function ensureWalletForBooking({ rootDir, storageRoot, booking }) {
   const config = walletConfig({ rootDir, storageRoot });
   const input = customerFromBooking(booking);
@@ -220,6 +348,7 @@ async function ensureWalletForBooking({ rootDir, storageRoot, booking }) {
 
   await saveMetadata(config, metadata);
   await tryBuildPass(config, metadata);
+  await notifyDevices(config, metadata, "booking.updated");
   return metadata;
 }
 
@@ -433,8 +562,10 @@ async function updateWalletForBookingStatus({ rootDir, storageRoot, booking }) {
     bookingId: booking.id,
     status: metadata.bookingStatus,
   });
+  metadata.lastUpdatedTag = new Date().toISOString();
   await saveMetadata(config, metadata);
   await tryBuildPass(config, metadata);
+  await notifyDevices(config, metadata, "booking.status-updated");
   return metadata;
 }
 
@@ -447,6 +578,7 @@ async function simulateVisit({ rootDir, storageRoot, serialNumber }) {
   if (metadata.visits >= metadata.visitsGoal) {
     metadata.reward = "Free Haircut Available";
   }
+  metadata.lastUpdatedTag = new Date().toISOString();
   await appendHistory(config, metadata.customerId, {
     action: "visit.simulated",
     serialNumber: metadata.serialNumber,
@@ -454,6 +586,7 @@ async function simulateVisit({ rootDir, storageRoot, serialNumber }) {
   });
   await saveMetadata(config, metadata);
   await tryBuildPass(config, metadata);
+  await notifyDevices(config, metadata, "visit.simulated");
   return metadata;
 }
 
@@ -594,10 +727,12 @@ module.exports = {
   findWalletBySerial,
   findWalletForBooking,
   generateTestWallet,
+  pushPassUpdate,
   registerDevice,
   runWalletDiagnostics,
   setWalletStatus,
   simulateVisit,
+  testApnsConnectivity,
   unregisterDevice,
   updateWalletForBookingStatus,
   walletConfig,

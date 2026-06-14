@@ -438,6 +438,40 @@ pass would sign but Apple Wallet rejects it. Either set the env var to the
 certificate's real identifier or re-issue the certificate for the desired
 identifier in the Apple Developer portal.
 
+## Live Push Updates (APNs) — Phase 3
+
+Installed passes update themselves when their data changes. No new credential is
+required: the **Pass Type ID certificate** (`APPLE_WALLET_CERT_PATH` +
+`APPLE_WALLET_KEY_PATH`) is reused as the TLS client certificate for APNs.
+
+Flow:
+1. The iPhone registers via `POST /api/wallet/v1/devices/.../registrations/...`
+   and we store its `pushToken` (`src/lib/wallet/index.js: registerDevice`).
+2. When stamps / booking / status change, the server rebuilds the pass and calls
+   `notifyDevices()` → `src/lib/wallet/apns.js: pushToDevices()` which opens an
+   HTTP/2 session to `api.push.apple.com`, `POST /3/device/{token}` with
+   `apns-topic: <passTypeIdentifier>` and an empty body.
+3. The device re-fetches the updated pass from the Wallet web service.
+
+Dead tokens (HTTP 410 / `BadDeviceToken`) are pruned automatically. Push is
+best-effort and never blocks the request; failures are recorded in wallet
+history with a safe reason. pushTokens and certificate bytes never appear in any
+response or log.
+
+Admin tools:
+- `POST /api/admin/wallet/push-test` — probe APNs reachability + certificate auth
+  against a throwaway token (a `BadDeviceToken` reply means the cert works).
+- `POST /api/admin/wallet/{serial}/push` — resend the current pass to all
+  registered devices.
+
+Optional env:
+
+```env
+APPLE_WALLET_PUSH_ENABLED=true            # set false to disable sending
+APPLE_WALLET_APNS_HOST=api.push.apple.com # production gateway (default)
+APPLE_WALLET_APNS_PUSH_TYPE=              # leave empty for PassKit (default)
+```
+
 ## What Remains for Real Apple Wallet Push
 
 - Add valid Apple Pass Type ID.

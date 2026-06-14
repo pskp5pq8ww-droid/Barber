@@ -1393,6 +1393,7 @@
           <button class="btn btn-gold btn-sm" data-wallet-test>Generate Test Wallet Pass</button>
           <button class="btn btn-ghost btn-sm" data-wallet-update ${firstWallet ? "" : "disabled"}>Update Existing Wallet</button>
           <button class="btn btn-ghost btn-sm" data-wallet-visit ${firstWallet ? "" : "disabled"}>Simulate Visit</button>
+          <button class="btn btn-ghost btn-sm" data-wallet-pushtest>Test APNs Push</button>
           ${firstWallet ? `<a class="btn btn-ghost btn-sm" href="${_escapeHTML(firstWallet.downloadUrl || `/api/wallet/download/${encodeURIComponent(firstWallet.serialNumber)}`)}">Download Latest .pkpass</a>` : ""}
         </div>
         <div class="form-feedback ${flash ? (isError ? "error" : "success") : ""}" id="wallet-admin-feedback" aria-live="polite">${_escapeHTML(flash)}</div>
@@ -1490,6 +1491,7 @@
                   <td class="dim">${Number(w.deviceCount || 0)}</td>
                   <td><span class="status-badge ${w.passStatus === "signed" ? "confirmed" : "pending"}">${_escapeHTML(w.passStatus || "metadata-only")}</span></td>
                   <td class="wallet-report-actions">
+                    ${Number(w.deviceCount || 0) > 0 ? `<button class="btn btn-ghost btn-sm" data-wallet-push="${_escapeHTML(w.serialNumber)}">Resend</button>` : ""}
                     ${w.status === "suspended" || w.status === "cancelled"
                       ? `<button class="btn btn-ghost btn-sm" data-wallet-reactivate="${_escapeHTML(w.serialNumber)}">Reactivate</button>`
                       : `<button class="btn btn-ghost btn-sm" data-wallet-suspend="${_escapeHTML(w.serialNumber)}">Suspend</button>`}
@@ -1518,6 +1520,21 @@
       show(await UK_USERS.suspendWallet(btn.dataset.walletSuspend), "Pass suspended.")));
     el.querySelectorAll("[data-wallet-reactivate]").forEach(btn => btn.addEventListener("click", async () =>
       show(await UK_USERS.reactivateWallet(btn.dataset.walletReactivate), "Pass reactivated.")));
+    el.querySelectorAll("[data-wallet-push]").forEach(btn => btn.addEventListener("click", async () => {
+      const res = await UK_USERS.pushWalletUpdate(btn.dataset.walletPush);
+      const p = res.push || {};
+      show(res, res.ok ? `Push sent to ${p.sent || 0}/${p.attempted || 0} device(s).` : (res.error || "Push failed."));
+    }));
+    el.querySelector("[data-wallet-pushtest]")?.addEventListener("click", async () => {
+      const fb = $("#wallet-admin-feedback");
+      if (fb) { fb.textContent = "Testing APNs…"; fb.className = "form-feedback"; }
+      const res = await UK_USERS.testWalletPush();
+      const a = res.apns || {};
+      const msg = a.reachable
+        ? `APNs reachable (${a.reason || "ok"}). ${a.interpretation || ""}`
+        : `APNs not reachable: ${a.reason || "unknown"}.`;
+      if (fb) { fb.textContent = msg; fb.className = `form-feedback ${a.ok ? "success" : "error"}`; }
+    });
 
     el.querySelector("[data-wallet-copy-ref]")?.addEventListener("click", (event) => {
       const btn = event.currentTarget;

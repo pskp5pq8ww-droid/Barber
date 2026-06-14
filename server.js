@@ -1222,6 +1222,25 @@ async function handleApi(req, res, url) {
     });
   }
 
+  // Manually push the current pass to all registered devices.
+  const adminWalletPushMatch = pathName.match(/^\/api\/admin\/wallet\/([^/]+)\/push$/);
+  if (adminWalletPushMatch && method === "POST") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const serialNumber = decodeURIComponent(adminWalletPushMatch[1]);
+    const result = await walletService.pushPassUpdate({ rootDir: ROOT, storageRoot: STORAGE_ROOT, serialNumber, reason: "admin.resend" });
+    if (!result) return jsonError(res, 404, "WALLET_NOT_FOUND", "Wallet not found.");
+    upsertWalletIndex(store, result.metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, push: result.push, wallet: publicWallet(result.metadata) });
+  }
+
+  // Probe APNs reachability + certificate auth (no real device needed).
+  if (method === "POST" && pathName === "/api/admin/wallet/push-test") {
+    if (!requireRole(req, res, sessionState, "admin")) return;
+    const result = await walletService.testApnsConnectivity({ rootDir: ROOT, storageRoot: STORAGE_ROOT });
+    return json(res, 200, { ok: true, apns: result });
+  }
+
   const adminWalletStatusMatch = pathName.match(/^\/api\/admin\/wallet\/([^/]+)\/(suspend|reactivate|cancel)$/);
   if (adminWalletStatusMatch && method === "POST") {
     if (!requireRole(req, res, sessionState, "admin")) return;
