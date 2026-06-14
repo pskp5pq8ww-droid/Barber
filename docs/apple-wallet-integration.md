@@ -60,7 +60,7 @@ Do not put certificates in `assets/`, `public/`, `uploads/`, or any web-accessib
 Recommended Hostinger path:
 
 ```text
-/home/{user}/storage/cd/wallet/certs/
+/home/{user}/certs/
 ```
 
 Place:
@@ -98,9 +98,9 @@ UK_STORAGE_DIR=/home/u613502604/storage/cd
 APPLE_WALLET_PASS_TYPE_ID=pass.com.urbankings.wallet.v2
 APPLE_WALLET_TEAM_ID=5D9PB994JW
 APPLE_WALLET_ORG_NAME=Urban Kings
-APPLE_WALLET_CERT_PATH=/home/u613502604/storage/cd/wallet/certs/urban-kings-wallet-v2.pem
-APPLE_WALLET_KEY_PATH=/home/u613502604/storage/cd/wallet/certs/urban-kings-wallet-v2.key
-APPLE_WALLET_WWDR_CERT_PATH=/home/u613502604/storage/cd/wallet/certs/AppleWWDRCAG4.pem
+APPLE_WALLET_CERT_PATH=/home/u613502604/certs/urban-kings-wallet-v2.pem
+APPLE_WALLET_KEY_PATH=/home/u613502604/certs/urban-kings-wallet-v2.key
+APPLE_WALLET_WWDR_CERT_PATH=/home/u613502604/certs/AppleWWDRCAG4.pem
 APPLE_WALLET_BASE_URL=https://lawngreen-wolverine-255384.hostingersite.com
 ```
 
