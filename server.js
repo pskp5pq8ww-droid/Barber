@@ -582,8 +582,21 @@ function parseCookies(req) {
   }).filter(([key]) => key));
 }
 
-function cookieHeader(token, maxAge = SESSION_TTL_MS / 1000) {
-  return `uk_session=${encodeURIComponent(token)}; Path=/; Max-Age=${Math.floor(maxAge)}; HttpOnly; SameSite=Lax`;
+function requestIsHttps(req) {
+  if (!req) return false;
+  const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  if (proto) return proto === "https";
+  return Boolean(req.socket && req.socket.encrypted);
+}
+
+function cookieHeader(token, maxAge = SESSION_TTL_MS / 1000, { secure = false } = {}) {
+  const base = `uk_session=${encodeURIComponent(token)}; Path=/; Max-Age=${Math.floor(maxAge)}; HttpOnly; SameSite=Lax`;
+  return secure ? `${base}; Secure` : base;
+}
+
+function clearCookieHeader({ secure = false } = {}) {
+  const base = "uk_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax";
+  return secure ? `${base}; Secure` : base;
 }
 
 function walletDownloadUrl(metadata) {
@@ -608,6 +621,15 @@ function publicWallet(metadata) {
     location: metadata.location,
     visits: metadata.visits,
     visitsGoal: metadata.visitsGoal,
+    stampCount: typeof metadata.stampCount === "number" ? metadata.stampCount : metadata.visits,
+    rewardAvailable: Boolean(metadata.rewardAvailable),
+    rewardCycle: metadata.rewardCycle || 1,
+    status: metadata.status || "active",
+    currentBookingId: metadata.currentBookingId || null,
+    passInstallState: metadata.passInstallState || "created",
+    firstDownloadedAt: metadata.firstDownloadedAt || null,
+    lastDownloadedAt: metadata.lastDownloadedAt || null,
+    deviceCount: Array.isArray(metadata.devices) ? metadata.devices.length : 0,
     reward: metadata.reward,
     createdAt: metadata.createdAt,
     updatedAt: metadata.updatedAt,
@@ -621,6 +643,8 @@ function publicWallet(metadata) {
 function adminWallet(metadata) {
   if (!metadata) return null;
   const clean = clone(metadata);
+  // Never expose the authentication token, even to admins.
+  delete clean.authenticationToken;
   if (clean.serialNumber) {
     clean.downloadUrl = `/api/wallet/download/${encodeURIComponent(clean.serialNumber)}`;
   }
@@ -729,13 +753,13 @@ function appleWalletDebugStatus() {
   return { env, certificateFiles };
 }
 
-function sendPkPass(res, filePath, serialNumber, fileName = "") {
+function sendPkPass(res, filePath, serialNumber, fileName = "", { cache = "no-store" } = {}) {
   fs.readFile(filePath, (err, data) => {
     if (err) return jsonError(res, 404, "PKPASS_NOT_FOUND", "Pass file not found.");
     res.writeHead(200, {
       "Content-Type": "application/vnd.apple.pkpass",
       "Content-Disposition": `attachment; filename="${fileName || `${serialNumber}.pkpass`}"`,
-      "Cache-Control": "no-store",
+      "Cache-Control": cache,
     });
     res.end(data);
   });
@@ -1169,6 +1193,35 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
   }
 
+  // Session-protected loyalty pass download. The customer identity comes ONLY
+  // from the server session — a customerId in the query is never honoured.
+  if (method === "GET" && pathName === "/api/wallet/apple/me") {
+    if (!requireRole(req, res, sessionState, "customer")) return;
+    const customer = store.customers.find(c => c.id === session.customerId);
+    if (!customer) return jsonError(res, 404, "CUSTOMER_NOT_FOUND", "Customer account not found.");
+    const { result } = await walletService.downloadCustomerWalletPass({ rootDir: ROOT, storageRoot: STORAGE_ROOT, customer });
+    if (!result.ok) {
+      return walletPassError(res, result.status || 409, {
+        code: result.code || "PKPASS_NOT_SIGNED",
+        message: result.error || "Your loyalty pass could not be generated yet.",
+        reportId: result.reportId || "",
+        stage: result.stage || "",
+      });
+    }
+    return sendPkPass(res, result.path, result.metadata.serialNumber, "urban-kings-loyalty.pkpass", { cache: "private, no-store" });
+  }
+
+  // Public read of the signed-in customer's loyalty status (no token, no secrets).
+  if (method === "GET" && pathName === "/api/wallet/me") {
+    if (!requireRole(req, res, sessionState, "customer")) return;
+    const customer = store.customers.find(c => c.id === session.customerId);
+    if (!customer) return jsonError(res, 404, "CUSTOMER_NOT_FOUND", "Customer account not found.");
+    const metadata = await walletService.ensureWalletPassForCustomer({ rootDir: ROOT, storageRoot: STORAGE_ROOT, customer });
+    upsertWalletIndex(store, metadata);
+    await writeCollection("wallets", store.wallets);
+    return json(res, 200, { ok: true, wallet: publicWallet(metadata) });
+  }
+
   const walletDownloadMatch = pathName.match(/^\/api\/wallet\/download\/([^/]+)$/);
   if (walletDownloadMatch && method === "GET") {
     const serialNumber = decodeURIComponent(walletDownloadMatch[1]);
@@ -1252,39 +1305,92 @@ async function handleApi(req, res, url) {
     store.sessions.push(userSession);
     addLog(store, userSession, "auth.login", `${user.name} signed in.`);
     await writeMany({ sessions: store.sessions, activityLog: store.activityLog });
-    return json(res, 200, { ok: true, session: publicSession(userSession), data: visibleStore(store, userSession) }, { "Set-Cookie": cookieHeader(userSession.token) });
+    return json(res, 200, { ok: true, session: publicSession(userSession), data: visibleStore(store, userSession) }, { "Set-Cookie": cookieHeader(userSession.token, undefined, { secure: requestIsHttps(req) }) });
   }
 
   if (method === "POST" && pathName === "/api/auth/logout") {
     if (session) store.sessions = store.sessions.filter(s => s.token !== session.token);
     await writeCollection("sessions", store.sessions);
-    return json(res, 200, { ok: true }, { "Set-Cookie": "uk_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" });
+    return json(res, 200, { ok: true }, { "Set-Cookie": clearCookieHeader({ secure: requestIsHttps(req) }) });
   }
 
   if (method === "POST" && pathName === "/api/customers/register") {
+    const firstName = String(body.firstName || "").trim();
+    const lastName = String(body.lastName || "").trim();
+    const composedName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const name = String(body.name || composedName || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
+    const phone = String(body.phone || "").trim();
     const password = String(body.password || "");
-    if (!body.name || !email || !body.phone || password.length < 8) return json(res, 400, { ok: false, error: "Name, email, phone and an 8 character password are required." });
-    if (store.customers.some(c => c.email.toLowerCase() === email)) return json(res, 409, { ok: false, error: "A customer with this email already exists." });
+    const passwordConfirm = body.passwordConfirm !== undefined ? String(body.passwordConfirm) : password;
+    const acceptedTerms = body.acceptTerms === true || body.acceptedTerms === true;
+
+    if (!name || !email || !phone || password.length < 8) {
+      return json(res, 400, { ok: false, error: "Name, email, phone and an 8 character password are required." });
+    }
+    if (password !== passwordConfirm) {
+      return json(res, 400, { ok: false, error: "Passwords do not match." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json(res, 400, { ok: false, error: "A valid email address is required." });
+    }
+    if (body.acceptTerms !== undefined && !acceptedTerms) {
+      return json(res, 400, { ok: false, error: "You must accept the terms and privacy policy." });
+    }
+    const normalizedPhone = phone.replace(/[^\d+]/g, "");
+    // Protect against duplicate accounts by email OR phone (anti-enumeration:
+    // generic 409 either way so it cannot be used to probe which exists).
+    const emailTaken = store.customers.some(c => String(c.email || "").toLowerCase() === email);
+    const phoneTaken = normalizedPhone && store.customers.some(c => String(c.phone || "").replace(/[^\d+]/g, "") === normalizedPhone);
+    if (emailTaken || phoneTaken) {
+      return json(res, 409, { ok: false, code: "ACCOUNT_EXISTS", error: "An account with these details already exists. Try logging in or resetting your password." });
+    }
+
     const customer = {
       id: nextId("c", store.customers),
-      username: normalizeUsername(body),
+      username: normalizeUsername({ ...body, name }),
       passwordHash: hashPassword(password),
-      name: String(body.name).trim(),
+      name,
+      firstName: firstName || name.split(" ")[0] || name,
+      lastName: lastName || name.split(" ").slice(1).join(" "),
       email,
-      phone: String(body.phone).trim(),
+      phone,
       role: "customer",
       status: "active",
-      avatar: initials(body.name),
+      emailVerified: false,
+      avatar: initials(name),
       createdAt: now(),
       updatedAt: now(),
       isActive: true,
       profile: { loyaltyStamps: 0, totalVisits: 0, totalSpent: 0, memberTier: "New Member", preferredBarber: "", preferredService: "" },
     };
     store.customers.push(customer);
-    addLog(store, { userId: customer.id, role: "customer" }, "customer.created", `Customer ${customer.name} registered.`, { type: "customer", id: customer.id });
-    await writeMany({ customers: store.customers, activityLog: store.activityLog });
-    return json(res, 201, { ok: true, customer: sanitizeUser(customer) });
+    addLog(store, { userId: customer.id, role: "customer" }, "customer_account_created", `Customer ${customer.name} registered.`, { type: "customer", id: customer.id });
+
+    // Create exactly one loyalty wallet pass record for this customer (idempotent).
+    let walletMetadata = null;
+    try {
+      walletMetadata = await walletService.ensureWalletPassForCustomer({ rootDir: ROOT, storageRoot: STORAGE_ROOT, customer });
+      upsertWalletIndex(store, walletMetadata);
+      addLog(store, { userId: customer.id, role: "customer" }, "wallet_pass_record_created", `Loyalty pass created for ${customer.name}.`, { type: "wallet", id: walletMetadata.serialNumber });
+    } catch (err) {
+      // Compensating path: account stays usable; the pass is created lazily on
+      // first /api/wallet/apple/me call. Never leak internals.
+      console.error("[wallet] ensureWalletPassForCustomer failed at registration", err && err.code);
+      addLog(store, { userId: customer.id, role: "customer" }, "wallet_pass_creation_failed", `Loyalty pass deferred for ${customer.name}.`, { type: "customer", id: customer.id });
+    }
+
+    // Auto-login: create a secure session.
+    const userSession = makeSession(customer);
+    store.sessions.push(userSession);
+    await writeMany({ customers: store.customers, wallets: store.wallets, sessions: store.sessions, activityLog: store.activityLog });
+    return json(res, 201, {
+      ok: true,
+      customer: sanitizeUser(customer),
+      session: publicSession(userSession),
+      wallet: publicWallet(walletMetadata),
+      data: visibleStore(store, userSession),
+    }, { "Set-Cookie": cookieHeader(userSession.token, undefined, { secure: requestIsHttps(req) }) });
   }
 
   if (method === "GET" && pathName === "/api/bookings") {

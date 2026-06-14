@@ -54,8 +54,10 @@ async function reportSigningFailure(config, err, meta = {}) {
 }
 
 function walletCustomerIdFromBooking(booking) {
-  if (booking.id) return `booking-${safeSegment(booking.id)}`;
+  // A known/authenticated customer keeps ONE loyalty pass reused across every
+  // booking. Only true guests (no customerId) fall back to a per-booking pass.
   if (booking.customerId) return booking.customerId;
+  if (booking.id) return `booking-${safeSegment(booking.id)}`;
   const stable = String(booking.customerEmail || booking.customerPhone || booking.customerName || booking.id || "guest").toLowerCase();
   return `guest-${crypto.createHash("sha256").update(stable).digest("hex").slice(0, 16)}`;
 }
@@ -107,10 +109,21 @@ function defaultMetadata(input, config) {
     barberName: input.barberName || "",
     location: input.location || config.businessLocation,
     membershipStatus: "active",
+    status: "active",
     bookingStatus: "pending",
     visits: 0,
     visitsGoal: config.rewardGoal,
+    stampCount: 0,
+    rewardAvailable: false,
+    rewardCycle: 1,
     reward: config.rewardText,
+    currentBookingId: null,
+    passInstallState: "created",
+    firstDownloadedAt: null,
+    lastDownloadedAt: null,
+    devices: [],
+    lastUpdatedTag: createdAt,
+    origin: input.origin || "booking",
     createdAt,
     updatedAt: createdAt,
     lastBookingId: input.lastBookingId || "",
@@ -126,6 +139,12 @@ async function loadMetadata(config, customerId) {
 
 async function saveMetadata(config, metadata) {
   metadata.updatedAt = new Date().toISOString();
+  // Keep the loyalty mirror fields consistent with the canonical visit count.
+  const goal = Number(metadata.visitsGoal || config.rewardGoal) || config.rewardGoal;
+  metadata.stampCount = Math.max(0, Number(metadata.visits || 0));
+  metadata.rewardAvailable = metadata.stampCount >= goal;
+  if (!metadata.rewardCycle) metadata.rewardCycle = 1;
+  if (!metadata.status) metadata.status = "active";
   await writeJson(walletPaths(config, metadata.customerId).metadata, metadata);
   return metadata;
 }
@@ -196,10 +215,90 @@ async function ensureWalletForBooking({ rootDir, storageRoot, booking }) {
   metadata.location = input.location || metadata.location || config.businessLocation;
   metadata.bookingStatus = booking.status === "confirmed" ? "confirmed" : "pending";
   metadata.lastBookingId = booking.id || metadata.lastBookingId;
+  metadata.currentBookingId = booking.id || metadata.currentBookingId || null;
+  metadata.lastUpdatedTag = new Date().toISOString();
 
   await saveMetadata(config, metadata);
   await tryBuildPass(config, metadata);
   return metadata;
+}
+
+// In-process guard so two concurrent requests for the same customer can never
+// create two passes. Single-threaded JS guarantees the has/set runs atomically
+// before the first await; the second caller awaits the same in-flight promise.
+const customerPassLocks = new Map();
+
+/**
+ * Idempotent, race-safe "one loyalty pass per customer".
+ * Creates only the metadata record (no .pkpass build) — the binary is produced
+ * on demand when the customer taps "Add to Apple Wallet". Returns the existing
+ * pass if one already exists; never creates a duplicate.
+ */
+async function ensureWalletPassForCustomer({ rootDir, storageRoot, customer }) {
+  const customerId = String(customer && customer.id || "").trim();
+  if (!customerId) throw Object.assign(new Error("customer.id is required"), { code: "WALLET_CUSTOMER_ID_REQUIRED" });
+
+  if (customerPassLocks.has(customerId)) return customerPassLocks.get(customerId);
+
+  const work = (async () => {
+    const config = walletConfig({ rootDir, storageRoot });
+    let metadata = await loadMetadata(config, customerId);
+    if (metadata) {
+      // Reuse the existing pass; refresh non-identity holder fields only.
+      let changed = false;
+      const holderName = customer.name || [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+      if (holderName && metadata.holderName !== holderName) { metadata.holderName = holderName; changed = true; }
+      if (customer.email && metadata.email !== customer.email) { metadata.email = customer.email; changed = true; }
+      if (customer.phone && metadata.phone !== customer.phone) { metadata.phone = customer.phone; changed = true; }
+      if (changed) {
+        metadata.lastUpdatedTag = new Date().toISOString();
+        await saveMetadata(config, metadata);
+      }
+      await appendHistory(config, customerId, { action: "existing_wallet_pass_reused", serialNumber: metadata.serialNumber });
+      return metadata;
+    }
+
+    const holderName = customer.name || [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() || "Urban Kings Member";
+    metadata = defaultMetadata({
+      customerId,
+      holderName,
+      email: customer.email || "",
+      phone: customer.phone || "",
+      origin: "account",
+    }, config);
+    metadata.serviceName = metadata.serviceName || "Urban Kings Loyalty";
+    await saveMetadata(config, metadata);
+    await appendHistory(config, customerId, { action: "wallet_pass_record_created", serialNumber: metadata.serialNumber });
+    return metadata;
+  })();
+
+  customerPassLocks.set(customerId, work);
+  try {
+    return await work;
+  } finally {
+    customerPassLocks.delete(customerId);
+  }
+}
+
+/**
+ * Ensure the customer's pass exists, build the current .pkpass, mark it as
+ * downloaded, and return the downloadable result + metadata. Used by the
+ * session-protected GET /api/wallet/apple/me endpoint.
+ */
+async function downloadCustomerWalletPass({ rootDir, storageRoot, customer }) {
+  const config = walletConfig({ rootDir, storageRoot });
+  const metadata = await ensureWalletPassForCustomer({ rootDir, storageRoot, customer });
+  await tryBuildPass(config, metadata, { endpoint: "/api/wallet/apple/me" });
+  const result = await downloadablePass({ rootDir, storageRoot, serialNumber: metadata.serialNumber });
+  if (result.ok) {
+    const stamp = new Date().toISOString();
+    metadata.firstDownloadedAt = metadata.firstDownloadedAt || stamp;
+    metadata.lastDownloadedAt = stamp;
+    if (metadata.passInstallState !== "registered") metadata.passInstallState = "downloaded";
+    await saveMetadata(config, metadata);
+    await appendHistory(config, metadata.customerId, { action: "wallet_pass_downloaded", serialNumber: metadata.serialNumber });
+  }
+  return { result, metadata };
 }
 
 async function generateTestWallet({ rootDir, storageRoot }) {
@@ -393,7 +492,9 @@ async function walletReportById({ rootDir, storageRoot, reportId }) {
 
 module.exports = {
   downloadablePass,
+  downloadCustomerWalletPass,
   ensureWalletForBooking,
+  ensureWalletPassForCustomer,
   findWalletBySerial,
   findWalletForBooking,
   generateTestWallet,

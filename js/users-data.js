@@ -123,6 +123,34 @@ window.UK_USERS = (function () {
     return { ok: true, fileName: anchor.download };
   }
 
+  async function _downloadPkpassGet(path, fallbackFileName = "urban-kings.pkpass") {
+    const response = await fetch(path, { method: "GET", credentials: "include" });
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!response.ok) {
+      const errorPayload = contentType.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : {};
+      return {
+        ok: false,
+        status: response.status,
+        code: errorPayload.code || "PKPASS_DOWNLOAD_FAILED",
+        error: errorPayload.message || errorPayload.error || "Pass could not be generated.",
+        reportId: errorPayload.reportId || (errorPayload.errorDetails && errorPayload.errorDetails.reportId) || "",
+        stage: errorPayload.stage || (errorPayload.errorDetails && errorPayload.errorDetails.stage) || "",
+      };
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = _filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackFileName);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { ok: true, fileName: anchor.download };
+  }
+
   async function init(payload) {
     if (payload) return _hydrate(payload);
     const result = await _api("/api/bootstrap");
@@ -279,7 +307,17 @@ window.UK_USERS = (function () {
     const result = await _api("/api/customers/register", { method: "POST", body: payload });
     if (!result.ok) return result;
     _replace("customers", result.customer);
+    if (result.wallet) _replace("wallets", result.wallet);
     return result;
+  }
+
+  // Loyalty pass for the signed-in customer (identity comes from the session).
+  async function getMyWallet() {
+    return _api("/api/wallet/me");
+  }
+
+  async function downloadMyWalletPass() {
+    return _downloadPkpassGet("/api/wallet/apple/me", "urban-kings-loyalty.pkpass");
   }
 
   async function createCustomerUser(adminId, payload = {}) {
@@ -510,6 +548,8 @@ window.UK_USERS = (function () {
     deactivateBarberUser,
     createCustomerUser,
     registerCustomer,
+    getMyWallet,
+    downloadMyWalletPass,
     updateCustomerUser,
     deactivateCustomerUser,
     createBooking,

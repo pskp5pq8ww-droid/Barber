@@ -69,5 +69,15 @@ window.Auth = (function () {
     _save(session);
   }
 
-  return { login, logout, getSession, requireRole, touch };
+  // Adopt a session the server already established (e.g. auto-login after
+  // account registration). The httpOnly cookie is already set by the server;
+  // here we only mirror the sanitized session for client-side routing.
+  function adoptSession(session, data) {
+    if (!session) return { ok: false };
+    _save(session);
+    if (window.UK_USERS && data) window.UK_USERS.setServerData(data);
+    return { ok: true, session };
+  }
+
+  return { login, logout, getSession, requireRole, touch, adoptSession };
 })();

@@ -2307,6 +2307,61 @@
   /* =====================================================
      RENDER — CUSTOMER PORTAL
      ===================================================== */
+  function _walletInstallLabel(state) {
+    if (state === "registered") return "Installed on a device";
+    if (state === "downloaded") return "Downloaded — open on your iPhone to install";
+    return "Not added yet";
+  }
+
+  // Fetches the signed-in customer's loyalty pass and renders the
+  // "Add to Apple Wallet" panel. Identity comes from the session, not the DOM.
+  async function _fillWalletPassPanel(session) {
+    const panel = $("#cp-wallet-pass");
+    if (!panel) return;
+    const res = await UK_USERS.getMyWallet().catch(() => ({ ok: false }));
+    const w = res && res.ok ? res.wallet : null;
+    const goal = (w && w.visitsGoal) || 5;
+    const stamps = (w && (typeof w.stampCount === "number" ? w.stampCount : w.visits)) || 0;
+    const remaining = Math.max(0, goal - stamps);
+    const dots = Array.from({ length: goal }, (_, i) => `<span class="cp-loyalty-dot ${i < stamps ? "on" : ""}"></span>`).join("");
+    panel.innerHTML = `
+      <div class="pt-panel-head"><h3>Apple Wallet Loyalty Pass</h3>
+        <span class="dim">${w ? _escapeHTML(_walletInstallLabel(w.passInstallState)) : ""}</span>
+      </div>
+      <div style="padding:16px;">
+        <div class="cp-loyalty-title">URBAN KINGS LOYALTY</div>
+        <div class="cp-loyalty-dots">${dots}</div>
+        <div class="cp-loyalty-count">${stamps} of ${goal} visits</div>
+        <p class="dim" style="margin:6px 0 14px;">
+          ${w && w.rewardAvailable
+            ? "Reward available — show your pass at the counter to redeem."
+            : `${remaining} more ${remaining === 1 ? "visit" : "visits"} to unlock your reward. Each completed visit adds one stamp.`}
+        </p>
+        <button class="wallet-badge-button" type="button" id="cp-add-wallet" aria-label="Add to Apple Wallet">
+          <img src="/assets/apple-wallet/add-to-apple-wallet.svg" alt="Add to Apple Wallet" loading="lazy" />
+        </button>
+        <div class="form-feedback" id="cp-wallet-feedback" aria-live="polite" style="margin-top:10px;"></div>
+        <p class="dim" style="font-size:.72rem;margin-top:8px;">Apple Wallet is available on compatible Apple devices.</p>
+      </div>`;
+
+    panel.querySelector("#cp-add-wallet")?.addEventListener("click", async () => {
+      const fb = $("#cp-wallet-feedback");
+      if (fb) { fb.textContent = "Preparing your pass…"; fb.className = "form-feedback"; }
+      const out = await UK_USERS.downloadMyWalletPass();
+      if (!out.ok) {
+        if (fb) {
+          const lines = [out.error || "We couldn't generate your pass."];
+          if (out.code) lines.push(`Error code: ${out.code}`);
+          if (out.reportId) lines.push(`Report ID: ${out.reportId}`);
+          fb.innerHTML = lines.map(l => `<div>${_escapeHTML(l)}</div>`).join("");
+          fb.className = "form-feedback error";
+        }
+        return;
+      }
+      if (fb) { fb.textContent = "Pass downloaded. Open it on your iPhone to add it to Apple Wallet."; fb.className = "form-feedback success"; }
+    });
+  }
+
   function renderCustomerPortal(session) {
     const nameEl = $("#cp-user-name");
     if (nameEl) nameEl.textContent = session.displayName;
@@ -2328,7 +2383,17 @@
       pill.textContent = `${unread} unread`;
     }
 
+    const welcome = _walletWelcome;
+    _walletWelcome = null;
+
     el.innerHTML = `
+      ${welcome ? `
+        <div class="cp-welcome-card">
+          <div class="eyebrow mini">Welcome to Urban Kings</div>
+          <h3>Your account is ready, ${_escapeHTML((welcome.customer && (welcome.customer.firstName || welcome.customer.name)) || session.displayName || "")}.</h3>
+          <p>Your personal loyalty pass has been created with <b>0 of 5 visits</b>. Add it to Apple Wallet to keep your bookings, stamps and rewards in one place.</p>
+        </div>` : ""}
+
       <!-- Next appointment card -->
       ${next ? `
         <div class="cp-next-card">
@@ -2364,6 +2429,12 @@
             ).join("")}
           </div>
         </div>
+      </div>
+
+      <!-- Apple Wallet loyalty pass -->
+      <div class="pt-panel" style="margin-bottom:16px;" id="cp-wallet-pass">
+        <div class="pt-panel-head"><h3>Apple Wallet Loyalty Pass</h3></div>
+        <div style="padding:16px;" class="dim">Loading your loyalty pass…</div>
       </div>
 
       <!-- Upcoming bookings -->
@@ -2429,6 +2500,8 @@
         ${_renderNotificationList(notifications, session.customerId)}
       </div>`;
 
+    _fillWalletPassPanel(session);
+
     const markRead = $("#cp-mark-read");
 	    if (markRead) markRead.onclick = async () => {
 	      await UK_USERS.markAllNotificationsRead(session.customerId, "customer");
@@ -2479,24 +2552,32 @@
         email: $("#register-email").value.trim(),
         phone: $("#register-phone").value.trim(),
         password: $("#register-password").value,
-        confirmPassword: $("#register-confirm").value,
+        passwordConfirm: $("#register-confirm").value,
       });
       if (!result.ok) {
         if (error) error.textContent = result.error;
         return;
       }
-      const login = await Auth.login(result.customer.email, $("#register-password").value, "customer");
-      if (!login.ok) {
-        if (success) success.textContent = "Account created. Please sign in.";
-        goToRoute("/customer/login");
-        return;
+      // The server auto-creates the loyalty pass and logs the customer in.
+      if (result.session) {
+        Auth.adoptSession(result.session, result.data);
+      } else {
+        const login = await Auth.login(result.customer.email, $("#register-password").value, "customer");
+        if (!login.ok) {
+          if (success) success.textContent = "Account created. Please sign in.";
+          goToRoute("/customer/login");
+          return;
+        }
       }
-      if (success) success.textContent = "Account created.";
       Views.inited["customer-portal"] = false;
       updateNavAuthState();
+      _walletWelcome = { customer: result.customer, wallet: result.wallet || null };
       goToRoute("/customer/dashboard");
     });
   }
+
+  // One-shot welcome state shown on the first dashboard render after sign-up.
+  let _walletWelcome = null;
 
   function renderCheckout() {
     const el = $("#checkout-body"); if (!el) return;
