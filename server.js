@@ -665,7 +665,9 @@ function publicWallet(metadata) {
     lastBookingId: metadata.lastBookingId,
     passStatus: metadata.passStatus,
     passError: metadata.passError,
-    downloadUrl: metadata.downloadUrl || walletDownloadUrl(metadata),
+    // The customer downloads their own pass via the session-protected endpoint.
+    // The authentication token is NEVER placed in a JSON response or URL.
+    downloadUrl: "/api/wallet/apple/me",
   };
 }
 
